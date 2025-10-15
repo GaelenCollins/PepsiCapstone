@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QTabWidget, QWidget,
                            QComboBox, QDateEdit, QCheckBox, QGroupBox, QSpinBox,
                            QProgressBar, QSplitter)
 from PyQt5.QtCore import Qt, pyqtSignal, QDate, QThread, pyqtSlot, QTimer
-from PyQt5.QtGui import QFont, QIcon, QColor, QPalette
+from PyQt5.QtGui import QFont, QIcon, QColor, QPalette, QPixmap
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -142,7 +142,7 @@ class RejectedUnitsAnalyzer(QMainWindow):
         self.apply_theme()
         
     def setup_ui(self):
-        self.setWindowTitle("E80 Rejected Units Analyzer")
+        self.setWindowTitle("Gaelen Collins - E80 Rejected Units Analyzer")
         self.setGeometry(100, 100, 1600, 1000)
         
         # Central widget
@@ -477,19 +477,39 @@ class RejectedUnitsAnalyzer(QMainWindow):
         
     def create_header(self, main_layout):
         header = QFrame()
-        header.setFixedHeight(35)  # Reduced from 80 to 50
+        header.setFixedHeight(40)  # Slightly increased to accommodate larger UGA logo
         
         header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(40, 10, 40, 10)  # Reduced margins
+        header_layout.setContentsMargins(40, 5, 40, 5)  # Reduced margins for logos
+        
+        # PepsiCo Logo
+        pepsico_logo = QLabel()
+        pepsico_pixmap = QPixmap("PepsiCo_logo.png")
+        if not pepsico_pixmap.isNull():
+            # Scale logo to fit header height (max 30px)
+            scaled_pepsico = pepsico_pixmap.scaledToHeight(30, Qt.SmoothTransformation)
+            pepsico_logo.setPixmap(scaled_pepsico)
+        pepsico_logo.setAlignment(Qt.AlignCenter)
         
         # Title
         title = QLabel("UGA Capstone - E80 Rejected Units Analyzer")
         title.setFont(QFont("Segoe UI", 14, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
+        
+        # UGA Logo
+        uga_logo = QLabel()
+        uga_pixmap = QPixmap("ugaengineering.png")
+        if not uga_pixmap.isNull():
+            # Scale logo to fit header height (max 38px - larger for UGA)
+            scaled_uga = uga_pixmap.scaledToHeight(90, Qt.SmoothTransformation)
+            uga_logo.setPixmap(scaled_uga)
+        uga_logo.setAlignment(Qt.AlignCenter)
 
+        header_layout.addWidget(pepsico_logo)
         header_layout.addStretch()
         header_layout.addWidget(title)
         header_layout.addStretch()
+        header_layout.addWidget(uga_logo)
         
         header.setLayout(header_layout)
         main_layout.addWidget(header)
