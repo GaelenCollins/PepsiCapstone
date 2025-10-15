@@ -177,7 +177,6 @@ class RejectedUnitsAnalyzer(QMainWindow):
         self.create_time_analysis_tab()
         self.create_sku_analysis_tab()
         self.create_rejection_rate_tab()
-        self.create_reports_tab()
         
         central_widget.setLayout(main_layout)
         
@@ -1157,59 +1156,6 @@ class RejectedUnitsAnalyzer(QMainWindow):
         
         self.tab_widget.addTab(rejection_tab, "📊 Rejection Rates")
         
-    def create_reports_tab(self):
-        tab = QWidget()
-        
-        # Create scroll area
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"background-color: {self.theme.get_color('bg')}; border: none;")
-        
-        # Create main widget for scroll area
-        main_widget = QWidget()
-        layout = QVBoxLayout()
-        layout.setContentsMargins(20, 20, 20, 20)
-        
-        # Export options
-        export_card = ModernCard("📋 Generate Reports", self.theme)
-        
-        # Report type selection
-        report_layout = QHBoxLayout()
-        
-        self.summary_report_btn = QPushButton("Summary Report")
-        self.summary_report_btn.clicked.connect(self.generate_summary_report)
-        
-        self.detailed_report_btn = QPushButton("Detailed Analysis")
-        self.detailed_report_btn.clicked.connect(self.generate_detailed_report)
-        
-        self.trend_report_btn = QPushButton("Trend Report")
-        self.trend_report_btn.clicked.connect(self.generate_trend_report)
-        
-        report_layout.addWidget(self.summary_report_btn)
-        report_layout.addWidget(self.detailed_report_btn)
-        report_layout.addWidget(self.trend_report_btn)
-        
-        export_card.content_layout.addLayout(report_layout)
-        layout.addWidget(export_card)
-        
-        # Report preview
-        preview_card = ModernCard("Report Preview", self.theme)
-        self.report_preview = QTextEdit()
-        self.report_preview.setFont(QFont("Consolas", 10))
-        self.report_preview.setReadOnly(True)
-        preview_card.content_layout.addWidget(self.report_preview)
-        layout.addWidget(preview_card)
-        
-        main_widget.setLayout(layout)
-        scroll.setWidget(main_widget)
-        
-        # Set scroll area as the tab content
-        tab_layout = QVBoxLayout()
-        tab_layout.setContentsMargins(0, 0, 0, 0)
-        tab_layout.addWidget(scroll)
-        tab.setLayout(tab_layout)
-        self.tab_widget.addTab(tab, "📋 Reports")
-        
     def select_file(self):
         filename, _ = QFileDialog.getOpenFileName(
             self, "Select Rejected Units Excel File", "", 
@@ -1288,8 +1234,6 @@ class RejectedUnitsAnalyzer(QMainWindow):
         self.rejection_figure.clear()
         self.rejection_canvas.draw()
         
-        # Clear report preview
-        self.report_preview.setText("No data available for report generation.")
         
     def process_data(self):
         if not self.current_file:
@@ -1576,7 +1520,7 @@ class RejectedUnitsAnalyzer(QMainWindow):
             
             # Add "Other" slice if there are more than 5 reasons
             if other_count > 0:
-                pie_labels.append('Other')
+                pie_labels.append('One of the other 20 Reasons')
                 pie_counts.append(other_count)
             
             colors = ['#e74c3c', '#f39c12', '#f1c40f', '#2ecc71', '#3498db', '#9b59b6']
@@ -1594,14 +1538,27 @@ class RejectedUnitsAnalyzer(QMainWindow):
             # Sort periods numerically to ensure correct chronological order
             # Extract number from "Period X" format for proper sorting
             periods = sorted(period_trends.keys(), key=lambda x: int(x.split()[-1]))
+           
             quantities = [period_trends[period] for period in periods]
+            
+            # Create clean period labels (just the numbers)
+            period_labels = [period.split()[-1] for period in periods]
             
             ax2.plot(periods, quantities, marker='o', color='#e74c3c', linewidth=3, markersize=8)
             ax2.set_title('Period Rejection Trends', color='white', fontweight='bold', fontsize=16)
+            ax2.set_xlabel('Period', color='white', fontsize=12)
             ax2.set_ylabel('Rejected Quantity', color='white', fontsize=12)
-            ax2.tick_params(axis='x', rotation=45, colors='white')
+            ax2.set_xticks(range(len(periods)))
+            ax2.set_xticklabels(period_labels)
+            ax2.tick_params(axis='x', rotation=0, colors='white')
             ax2.tick_params(axis='y', colors='white')
             ax2.grid(True, alpha=0.3, color='white')
+
+            # Add value labels on line plot points
+            for i, (period, quantity) in enumerate(zip(periods, quantities)):
+                ax2.text(i, quantity + max(quantities) * 0.02, f'{int(quantity)}', 
+                        ha='center', va='bottom', color='white', fontweight='bold', fontsize=8,
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor='black', alpha=0.8))
             
         # Style all axes
         for ax in [ax1, ax2]:
@@ -1837,7 +1794,6 @@ class RejectedUnitsAnalyzer(QMainWindow):
         # Categorize rejection reasons using filtered data
         dimensional_issues = []
         tag_tracking_issues = []
-        system_issues = []
         uncategorized_issues = []
         
         if 'Reject reason' in filtered_data.columns:
@@ -1848,10 +1804,8 @@ class RejectedUnitsAnalyzer(QMainWindow):
                 reason_lower = str(reason).lower()
                 if any(keyword in reason_lower for keyword in ['dimension', 'size', 'measurement', 'weight', 'position', 'height', 'width', 'length', 'tolerance', 'maximum']):
                     dimensional_issues.append((reason, count))
-                elif any(keyword in reason_lower for keyword in ['tag', 'label', 'lpn', 'barcode', 'duplicate', 'unit data not found', 'tracking', 'expected', 'exist']):
+                elif any(keyword in reason_lower for keyword in ['tag', 'label', 'lpn', 'barcode', 'duplicate', 'unit data not found', 'tracking', 'expected', 'exist', 'system', 'error', 'timeout', 'failed', 'check error']):
                     tag_tracking_issues.append((reason, count))
-                elif any(keyword in reason_lower for keyword in ['system', 'error', 'timeout', 'failed', 'check error']):
-                    system_issues.append((reason, count))
                 else:
                     uncategorized_issues.append((reason, count))
         
@@ -1861,19 +1815,18 @@ class RejectedUnitsAnalyzer(QMainWindow):
             for reason, count in uncategorized_issues:
                 print(f"  - '{reason}': {count} occurrences")
         
-        # Plot 1: Category breakdown (three categories now)
-        categories = ['Dimensional Issues', 'Tag/Tracking Issues', 'System Issues']
+        # Plot 1: Category breakdown (two categories now)
+        categories = ['Dimensional Issues', 'Tag/Tracking/System Issues']
         category_counts = [sum(count for _, count in dimensional_issues),
-                          sum(count for _, count in tag_tracking_issues),
-                          sum(count for _, count in system_issues)]
+                          sum(count for _, count in tag_tracking_issues)]
         
-        colors = ['#e74c3c', '#f39c12', '#9b59b6']
+        colors = ['#e74c3c', '#f39c12']
         wedges, texts, autotexts = ax1.pie(category_counts, labels=categories, autopct='%1.1f%%', 
                                           colors=colors, textprops={'color': 'white', 'fontweight': 'bold'})
         ax1.set_title('Rejection Categories', color='white', fontweight='bold', fontsize=14)
         
         # Plot 2: Top reasons by category
-        all_issues = dimensional_issues + tag_tracking_issues + system_issues
+        all_issues = dimensional_issues + tag_tracking_issues
         all_issues.sort(key=lambda x: x[1], reverse=True)
         
         top_reasons = all_issues[:8]
@@ -2786,160 +2739,7 @@ class RejectedUnitsAnalyzer(QMainWindow):
         self.filtered_data = filtered_data
         print(f"Filtered data: {len(filtered_data)} rows (original: {len(self.current_data)} rows)")
             
-    def generate_summary_report(self):
-        if self.analysis_results is None:
-            QMessageBox.warning(self, "No Data", "Please load and analyze data first.")
-            return
-            
-        report = f"""
-E80 REJECTED UNITS ANALYSIS REPORT
-==================================
-Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-EXECUTIVE SUMMARY
-================
-Total Rejected Units: {self.analysis_results.get('total_rejections', 0):,}
-Total Rejected Quantity: {self.analysis_results.get('total_quantity', 0):,}
-Analysis Period: {self.analysis_results.get('date_range', (None, None))[0]} to {self.analysis_results.get('date_range', (None, None))[1]}
-
-KEY FINDINGS
-============
-"""
         
-        if 'rejection_reasons' in self.analysis_results:
-            report += "\nTop Rejection Reasons:\n"
-            for i, (reason, count) in enumerate(list(self.analysis_results['rejection_reasons'].items())[:5]):
-                percentage = (count / self.analysis_results.get('total_rejections', 1)) * 100
-                report += f"{i+1}. {reason}: {count:,} ({percentage:.1f}%)\n"
-                
-        if 'line_breakdown' in self.analysis_results:
-            report += "\nProduction Line Impact:\n"
-            for line, count in self.analysis_results['line_breakdown'].items():
-                percentage = (count / self.analysis_results.get('total_rejections', 1)) * 100
-                report += f"• {line}: {count:,} rejections ({percentage:.1f}%)\n"
-                
-        report += f"""
-
-RECOMMENDATIONS
-===============
-1. Focus improvement efforts on the top rejection reasons
-2. Investigate production lines with highest rejection rates
-3. Implement preventive maintenance schedules
-4. Enhance operator training programs
-5. Consider system upgrades for identified root causes
-
-ESTIMATED COST IMPACT
-=====================
-Based on industry standards, each rejected pallet costs approximately $50-100 in rework and disposal.
-With {self.analysis_results.get('total_quantity', 0):,} rejected units, estimated annual impact: 
-${self.analysis_results.get('total_quantity', 0) * 75:,.0f}
-"""
-        
-        self.report_preview.setText(report)
-        
-    def generate_detailed_report(self):
-        if self.current_data is None:
-            QMessageBox.warning(self, "No Data", "Please load and analyze data first.")
-            return
-            
-        # Generate detailed analysis report
-        report = f"""
-DETAILED ROOT CAUSE ANALYSIS REPORT
-===================================
-Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-DATA OVERVIEW
-=============
-Total Records: {len(self.current_data):,}
-Date Range: {self.current_data['Date'].min()} to {self.current_data['Date'].max()}
-Unique Products: {self.current_data['Product'].nunique() if 'Product' in self.current_data.columns else 'N/A'}
-Unique Lines: {self.current_data['Line'].nunique() if 'Line' in self.current_data.columns else 'N/A'}
-
-DETAILED BREAKDOWN
-==================
-"""
-        
-        # Add detailed statistics for each category
-        if 'Reject reason' in self.current_data.columns:
-            report += "\nRejection Reasons Analysis:\n"
-            reason_stats = self.current_data['Reject reason'].value_counts()
-            for reason, count in reason_stats.head(10).items():
-                percentage = (count / len(self.current_data)) * 100
-                report += f"• {reason}: {count:,} ({percentage:.1f}%)\n"
-                
-        if 'Source' in self.current_data.columns:
-            report += "\nProduction Line Analysis:\n"
-            line_stats = self.current_data['Source'].value_counts()
-            for line, count in line_stats.items():
-                percentage = (count / len(self.current_data)) * 100
-                report += f"• {line}: {count:,} ({percentage:.1f}%)\n"
-                
-        # Add time-based analysis
-        if 'Reject datetime' in self.current_data.columns:
-            self.current_data['DayOfWeek'] = self.current_data['Reject datetime'].dt.day_name()
-            self.current_data['Hour'] = self.current_data['Reject datetime'].dt.hour
-            
-            report += "\nTemporal Analysis:\n"
-            dow_stats = self.current_data['DayOfWeek'].value_counts()
-            report += "Rejections by Day of Week:\n"
-            for day, count in dow_stats.items():
-                percentage = (count / len(self.current_data)) * 100
-                report += f"• {day}: {count:,} ({percentage:.1f}%)\n"
-                
-        self.report_preview.setText(report)
-        
-    def generate_trend_report(self):
-        if self.analysis_results is None:
-            QMessageBox.warning(self, "No Data", "Please load and analyze data first.")
-            return
-            
-        report = f"""
-TREND ANALYSIS REPORT
-====================
-Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-MONTHLY TRENDS
-==============
-"""
-        
-        if 'monthly_trends' in self.analysis_results:
-            for month, quantity in self.analysis_results['monthly_trends'].items():
-                report += f"• {month}: {quantity:,} rejected units\n"
-                
-        # Calculate trend direction
-        if len(self.analysis_results.get('monthly_trends', {})) >= 2:
-            quantities = list(self.analysis_results['monthly_trends'].values())
-            if len(quantities) >= 2:
-                recent_trend = quantities[-1] - quantities[-2]
-                if recent_trend > 0:
-                    trend_direction = "INCREASING"
-                    trend_color = "🔴"
-                elif recent_trend < 0:
-                    trend_direction = "DECREASING"
-                    trend_color = "🟢"
-                else:
-                    trend_direction = "STABLE"
-                    trend_color = "🟡"
-                    
-                report += f"\nTREND DIRECTION: {trend_color} {trend_direction}\n"
-                report += f"Change from previous month: {recent_trend:+,} units\n"
-                
-        report += f"""
-
-FORECASTING
-===========
-Based on current trends, projected annual rejection rate: 
-{self.analysis_results.get('total_quantity', 0) * 12 / max(1, len(self.analysis_results.get('monthly_trends', {}))):,.0f} units
-
-RECOMMENDATIONS
-===============
-1. Monitor trend direction closely
-2. Implement corrective actions for increasing trends
-3. Replicate successful practices from improving periods
-4. Set up automated alerts for trend changes
-"""
-        
-        self.report_preview.setText(report)
 
 def main():
     app = QApplication(sys.argv)
