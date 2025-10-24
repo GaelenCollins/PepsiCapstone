@@ -454,9 +454,78 @@ class RejectedUnitsAnalyzer(QMainWindow):
         sku_layout.addWidget(self.global_sku_scroll)
         sku_group.setLayout(sku_layout)
         
+        # Rejection reason filter
+        reason_group = QGroupBox("Rejection Reasons")
+        reason_group.setStyleSheet(f"""
+            QGroupBox {{
+                font-weight: bold;
+                border: 1px solid {self.theme.get_color('accent')};
+                border-radius: 3px;
+                margin-top: 1ex;
+                color: {self.theme.get_color('fg')};
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }}
+        """)
+        reason_layout = QVBoxLayout()
+        
+        # Reason filter buttons
+        reason_buttons_layout = QHBoxLayout()
+        self.reason_select_all_btn = QPushButton("Select All")
+        self.reason_select_all_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self.theme.get_color('accent')};
+                color: white;
+                border: none;
+                padding: 5px 10px;
+                border-radius: 3px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {self.theme.get_color('accent_hover')};
+            }}
+        """)
+        self.reason_select_all_btn.clicked.connect(self.select_all_reasons)
+        
+        self.reason_reset_btn = QPushButton("Reset")
+        self.reason_reset_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #e74c3c;
+                color: white;
+                border: none;
+                padding: 5px 10px;
+                border-radius: 3px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #c0392b;
+            }}
+        """)
+        self.reason_reset_btn.clicked.connect(self.reset_reasons)
+        
+        reason_buttons_layout.addWidget(self.reason_select_all_btn)
+        reason_buttons_layout.addWidget(self.reason_reset_btn)
+        reason_buttons_layout.addStretch()
+        reason_layout.addLayout(reason_buttons_layout)
+        
+        self.global_reason_checkboxes = {}
+        self.global_reason_scroll = QScrollArea()
+        self.global_reason_scroll.setWidgetResizable(True)
+        self.global_reason_scroll.setMaximumHeight(120)
+        global_reason_widget = QWidget()
+        self.global_reason_widget_layout = QVBoxLayout()
+        global_reason_widget.setLayout(self.global_reason_widget_layout)
+        self.global_reason_scroll.setWidget(global_reason_widget)
+        reason_layout.addWidget(self.global_reason_scroll)
+        reason_group.setLayout(reason_layout)
+        
         filters_layout.addWidget(period_group)
         filters_layout.addWidget(line_group)
         filters_layout.addWidget(sku_group)
+        filters_layout.addWidget(reason_group)
         
         parent_layout.addWidget(self.filters_card)
         
@@ -2650,6 +2719,50 @@ class RejectedUnitsAnalyzer(QMainWindow):
                 self.global_sku_checkboxes[sku] = checkbox
                 self.global_sku_widget_layout.addWidget(sku_container)
         
+        # Update global rejection reason checkboxes
+        available_reasons = sorted(self.current_data['Reject reason'].unique())
+        for checkbox in self.global_reason_checkboxes.values():
+            checkbox.setParent(None)
+        self.global_reason_checkboxes.clear()
+        
+        for reason in available_reasons:
+            if pd.notna(reason):
+                # Create container for checkbox and solo button
+                reason_container = QWidget()
+                reason_container_layout = QHBoxLayout()
+                reason_container_layout.setContentsMargins(0, 0, 0, 0)
+                
+                checkbox = QCheckBox(str(reason))
+                checkbox.setChecked(True)
+                checkbox.stateChanged.connect(self.update_all_tabs)
+                
+                # Add solo button
+                solo_btn = QPushButton("Solo")
+                solo_btn.setMaximumWidth(50)
+                solo_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: #f39c12;
+                        color: white;
+                        border: none;
+                        padding: 2px 5px;
+                        border-radius: 2px;
+                        font-size: 10px;
+                        font-weight: bold;
+                    }}
+                    QPushButton:hover {{
+                        background-color: #e67e22;
+                    }}
+                """)
+                solo_btn.clicked.connect(lambda checked, r=reason: self.solo_reason(r))
+                
+                reason_container_layout.addWidget(checkbox)
+                reason_container_layout.addWidget(solo_btn)
+                reason_container_layout.addStretch()
+                reason_container.setLayout(reason_container_layout)
+                
+                self.global_reason_checkboxes[reason] = checkbox
+                self.global_reason_widget_layout.addWidget(reason_container)
+        
         # Initialize filtered data with all data selected
         self.apply_filters()
         
@@ -2688,6 +2801,24 @@ class RejectedUnitsAnalyzer(QMainWindow):
         """Reset all SKU checkboxes to unchecked"""
         for checkbox in self.global_sku_checkboxes.values():
             checkbox.setChecked(False)
+        self.update_all_tabs()
+        
+    def select_all_reasons(self):
+        """Select all rejection reason checkboxes"""
+        for checkbox in self.global_reason_checkboxes.values():
+            checkbox.setChecked(True)
+        self.update_all_tabs()
+        
+    def reset_reasons(self):
+        """Reset all rejection reason checkboxes to unchecked"""
+        for checkbox in self.global_reason_checkboxes.values():
+            checkbox.setChecked(False)
+        self.update_all_tabs()
+        
+    def solo_reason(self, reason):
+        """Solo a specific rejection reason (uncheck all others)"""
+        for r, checkbox in self.global_reason_checkboxes.items():
+            checkbox.setChecked(r == reason)
         self.update_all_tabs()
         
     def solo_period(self, period):
@@ -2753,6 +2884,12 @@ class RejectedUnitsAnalyzer(QMainWindow):
             selected_skus = [sku for sku, checkbox in self.global_sku_checkboxes.items() if checkbox.isChecked()]
             if selected_skus:
                 filtered_data = filtered_data[filtered_data['Sku'].isin(selected_skus)]
+        
+        # Apply rejection reason filter - multi-select
+        if hasattr(self, 'global_reason_checkboxes'):
+            selected_reasons = [reason for reason, checkbox in self.global_reason_checkboxes.items() if checkbox.isChecked()]
+            if selected_reasons:
+                filtered_data = filtered_data[filtered_data['Reject reason'].isin(selected_reasons)]
             
             
         # Store filtered data
