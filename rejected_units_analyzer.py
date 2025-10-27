@@ -269,6 +269,7 @@ class RejectedUnitsAnalyzer(QMainWindow):
                 border-radius: 3px;
                 margin-top: 1ex;
                 color: {self.theme.get_color('fg')};
+                background-color: {self.theme.get_color('card_bg')};
             }}
             QGroupBox::title {{
                 subcontrol-origin: margin;
@@ -337,6 +338,7 @@ class RejectedUnitsAnalyzer(QMainWindow):
                 border-radius: 3px;
                 margin-top: 1ex;
                 color: {self.theme.get_color('fg')};
+                background-color: {self.theme.get_color('card_bg')};
             }}
             QGroupBox::title {{
                 subcontrol-origin: margin;
@@ -405,6 +407,7 @@ class RejectedUnitsAnalyzer(QMainWindow):
                 border-radius: 3px;
                 margin-top: 1ex;
                 color: {self.theme.get_color('fg')};
+                background-color: {self.theme.get_color('card_bg')};
             }}
             QGroupBox::title {{
                 subcontrol-origin: margin;
@@ -473,6 +476,7 @@ class RejectedUnitsAnalyzer(QMainWindow):
                 border-radius: 3px;
                 margin-top: 1ex;
                 color: {self.theme.get_color('fg')};
+                background-color: {self.theme.get_color('card_bg')};
             }}
             QGroupBox::title {{
                 subcontrol-origin: margin;
