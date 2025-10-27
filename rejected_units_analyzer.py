@@ -1,5 +1,15 @@
 import sys
 import os
+
+# Get the correct path for bundled files
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -553,7 +563,7 @@ class RejectedUnitsAnalyzer(QMainWindow):
         
         # PepsiCo Logo
         pepsico_logo = QLabel()
-        pepsico_pixmap = QPixmap("PepsiCo_logo.png")
+        pepsico_pixmap = QPixmap(resource_path("PepsiCo_logo.png"))
         if not pepsico_pixmap.isNull():
             # Scale logo to fit header height (max 30px)
             scaled_pepsico = pepsico_pixmap.scaledToHeight(30, Qt.SmoothTransformation)
@@ -567,7 +577,7 @@ class RejectedUnitsAnalyzer(QMainWindow):
         
         # UGA Logo
         uga_logo = QLabel()
-        uga_pixmap = QPixmap("ugaengineering.png")
+        uga_pixmap = QPixmap(resource_path("ugaengineering.png"))
         if not uga_pixmap.isNull():
             # Scale logo to fit header height (max 38px - larger for UGA)
             scaled_uga = uga_pixmap.scaledToHeight(90, Qt.SmoothTransformation)
@@ -1429,7 +1439,7 @@ class RejectedUnitsAnalyzer(QMainWindow):
             
         try:
             # Load the SKU master file
-            sku_master_path = 'E80 Item Master - Master Excel.xlsx'
+            sku_master_path = resource_path('E80 Item Master - Master Excel.xlsx')
             sku_master = pd.read_excel(sku_master_path)
             
             # Create a mapping dictionary from SKU number to description
