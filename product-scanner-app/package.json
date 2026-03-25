@@ -1,0 +1,53 @@
+{
+  "name": "product-scanner-app",
+  "version": "1.0.0",
+  "description": "E80 Product Scanner - Real-time Production Line Monitoring",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "postinstall": "electron-rebuild -f -w sqlite3 && (electron-rebuild -f -w onoff || true)",
+    "rebuild": "electron-rebuild -f -w sqlite3 && (electron-rebuild -f -w onoff || true)"
+  },
+  "keywords": [
+    "electron",
+    "product-scanner",
+    "production-monitoring"
+  ],
+  "author": "Gaelen Collins",
+  "license": "MIT",
+  "overrides": {
+    "fs-extra": "^11.2.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.6.0",
+    "electron": "22.3.27",
+    "electron-builder": "^24.6.4"
+  },
+  "dependencies": {
+    "nodemailer": "^6.10.1",
+    "sqlite3": "^5.1.6"
+  },
+  "optionalDependencies": {
+    "onoff": "^6.0.3"
+  },
+  "build": {
+    "appId": "com.uga.e80productscanner",
+    "productName": "E80 Product Scanner",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    }
+  }
+}

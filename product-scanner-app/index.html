@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pepsi/Capstone Product Scanner</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="mobile-tab-main">
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <img src="assets/pepsico-logo.png" alt="PepsiCo" class="logo left-logo">
+            <h1 class="header-title">Pepsi/Capstone Product Scanner</h1>
+            <div class="header-actions">
+                <button class="header-btn" id="settings-btn">Settings</button>
+                <button class="header-btn" id="export-data-btn">Export Data</button>
+            </div>
+            <img src="assets/uga-logo.png" alt="UGA Engineering" class="logo right-logo uga-logo-large" height="100px" width="auto">
+        </div>
+    </header>
+
+    <!-- Join from phone (shown only in browser viewer) -->
+    <div id="join-from-phone" class="join-from-phone" aria-live="polite"></div>
+
+    <!-- Main Content -->
+    <div class="main-container">
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" id="main-tab-btn" onclick="switchTab('main')">Main View</button>
+            <button class="tab-btn" id="stats-tab-btn" onclick="switchTab('stats')">Advanced Statistics</button>
+        </div>
+
+        <!-- Main Tab Content -->
+        <div id="main-tab" class="tab-content active">
+            <!-- Scanner comparison: LPN vs Product (Product always has value; LPN can be missing) -->
+            <div class="scanner-section">
+                <div class="scanners-row">
+                    <div class="product-box scanner-box" id="scanner1-box">
+                        <div class="product-label">LPN scanner</div>
+                        <div class="scanner-box-inner" id="scanner1-inner">
+                            <div class="product-info-first" id="scanner1-product-resolved">—</div>
+                            <div class="product-code-small" id="scanner1-product-code">—</div>
+                            <div class="product-status" id="scanner1-status">—</div>
+                        </div>
+                        <div class="scanner-status-line" id="scanner1-status-line">Disconnected</div>
+                    </div>
+                    <div class="product-box scanner-box" id="scanner2-box">
+                        <div class="product-label">Product scanner</div>
+                        <div class="scanner-box-inner" id="scanner2-inner">
+                            <div class="product-info-first" id="scanner2-product-resolved"></div>
+                            <div class="product-code-small" id="scanner2-product-code">—</div>
+                            <div class="product-status" id="scanner2-status">—</div>
+                        </div>
+                        <div class="scanner-status-line" id="scanner2-status-line">No code for —</div>
+                        <div class="scanner-hint" id="scanner-hint">One scanner: plug in USB (keyboard mode) and keep this window focused. LPNs contain letters (e.g. GY); product barcodes are digits only — the app uses this to tell them apart.</div>
+                    </div>
+                </div>
+                <!-- Hidden input to capture barcode scanner (HID keyboard / continuous mode). Keep focused so scanner input goes here. -->
+                <input type="text" id="barcode-input-product" class="barcode-input-hidden" autocomplete="off" tabindex="-1" aria-hidden="true" />
+                <div class="comparison-status" id="comparison-status">Comparing LPN with Product scanner…</div>
+                <div class="last-error-line" id="last-error-line" aria-live="polite"></div>
+                <div class="admin-buttons">
+                    <button class="admin-btn" id="edit-item-master-btn">Edit Item Master</button>
+                </div>
+            </div>
+
+            <!-- Error History Section -->
+            <div class="error-history-section">
+                <h2>Error History</h2>
+                <div class="date-range-bar inline">
+                    <span class="date-range-label">Date range:</span>
+                    <input type="date" id="history-date-start" class="date-input">
+                    <span class="date-range-sep">to</span>
+                    <input type="date" id="history-date-end" class="date-input">
+                    <button type="button" class="btn-secondary btn-sm" id="history-date-apply">Apply</button>
+                </div>
+                <div class="error-history-container">
+                    <table class="status-table" id="status-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Product scanner</th>
+                                <th>LPN scanner</th>
+                                <th>Error type</th>
+                                <th>Status</th>
+                                <th>ID</th>
+                                <th>Time Ago</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="status-table-body">
+                            <!-- Rows will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Statistics Section -->
+            <div class="statistics-section">
+                <h2>Statistics</h2>
+                <p class="stats-date-note">Using date range below (Error History).</p>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Mismatches</div>
+                        <div class="stat-value" id="total-mismatches">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Today's Mismatches</div>
+                        <div class="stat-value" id="today-mismatches">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Resolved</div>
+                        <div class="stat-value" id="resolved-count">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Pending</div>
+                        <div class="stat-value" id="pending-count">0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Advanced Statistics Tab Content -->
+        <div id="stats-tab" class="tab-content">
+            <div class="advanced-stats-section">
+                <h2>Advanced Statistics</h2>
+                <div class="date-range-bar">
+                    <span class="date-range-label">Date range:</span>
+                    <input type="date" id="stats-date-start" class="date-input">
+                    <span class="date-range-sep">to</span>
+                    <input type="date" id="stats-date-end" class="date-input">
+                    <button type="button" class="btn-secondary btn-sm" id="stats-date-apply">Apply</button>
+                </div>
+                <!-- Worst Times -->
+                <div class="stat-group">
+                    <h3>Worst Times for Errors</h3>
+                    <div class="stat-group-content">
+                        <div class="stat-item">
+                            <div class="stat-item-label">Worst Hour</div>
+                            <div class="stat-item-value" id="worst-hour">--</div>
+                            <div class="stat-item-count" id="worst-hour-count">0 errors</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-item-label">Best Hour</div>
+                            <div class="stat-item-value" id="best-hour">--</div>
+                            <div class="stat-item-count" id="best-hour-count">0 errors</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Worst Days -->
+                <div class="stat-group">
+                    <h3>Worst Days for Errors</h3>
+                    <div class="stat-group-content">
+                        <div class="stat-item">
+                            <div class="stat-item-label">Worst Day</div>
+                            <div class="stat-item-value" id="worst-day">--</div>
+                            <div class="stat-item-count" id="worst-day-count">0 errors</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-item-label">Best Day</div>
+                            <div class="stat-item-value" id="best-day">--</div>
+                            <div class="stat-item-count" id="best-day-count">0 errors</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Worst Products -->
+                <div class="stat-group">
+                    <h3>Products with Most Errors</h3>
+                    <div class="table-container">
+                        <table class="stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Product</th>
+                                    <th>Error Count</th>
+                                    <th>Percentage</th>
+                                </tr>
+                            </thead>
+                            <tbody id="worst-products-body">
+                                <!-- Populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Hourly Distribution -->
+                <div class="stat-group">
+                    <h3>Error Distribution by Hour</h3>
+                    <div class="chart-container">
+                        <div id="hourly-chart" class="bar-chart">
+                            <!-- Populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Daily Distribution -->
+                <div class="stat-group">
+                    <h3>Error Distribution by Day</h3>
+                    <div class="chart-container">
+                        <div id="daily-chart" class="bar-chart">
+                            <!-- Populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile bottom tab bar (visible only in mobile layout) -->
+    <nav class="mobile-bottom-tabs" id="mobile-bottom-tabs" aria-label="Mobile navigation">
+        <button type="button" class="mobile-tab-btn active" data-mobile-tab="main">Main View</button>
+        <button type="button" class="mobile-tab-btn" data-mobile-tab="error-history">Error History</button>
+        <button type="button" class="mobile-tab-btn" data-mobile-tab="stats">Stats</button>
+    </nav>
+
+    <!-- Modals -->
+    <!-- Password Modal -->
+    <div id="password-modal" class="modal">
+        <div class="modal-content">
+            <h2>Admin Access</h2>
+            <p>Please enter the password to access admin features:</p>
+            <input type="password" id="password-input" placeholder="Enter password" class="password-input">
+            <div class="modal-buttons">
+                <button id="password-submit" class="btn-primary">Submit</button>
+                <button id="password-cancel" class="btn-secondary">Cancel</button>
+            </div>
+            <div id="password-error" class="error-message"></div>
+        </div>
+    </div>
+
+    <!-- Edit Item Master Modal -->
+    <div id="item-master-modal" class="modal">
+        <div class="modal-content large-modal">
+            <h2>Edit Item Master</h2>
+            <p class="item-master-backbone-note">The item list CSV is the backbone of the app — it links barcode, legacy item name, and product name for all scanner checks.</p>
+            <div class="modal-header-actions">
+                <button id="add-product-btn" class="btn-primary">Add Product</button>
+                <button type="button" id="refresh-item-master-btn" class="btn-secondary">Refresh</button>
+                <button type="button" id="export-item-master-csv" class="btn-secondary">Export CSV</button>
+                <button type="button" id="import-item-master-csv" class="btn-secondary">Import CSV</button>
+                <input type="file" id="import-item-master-file" accept=".csv" style="display:none">
+                <button id="close-item-master" class="btn-secondary">Close</button>
+            </div>
+            <div class="table-container">
+                <table class="master-table">
+                    <thead>
+                        <tr>
+                            <th>Barcode</th>
+                            <th>Legacy item name (7)</th>
+                            <th>Product name (mfg description)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="item-master-body">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Product Modal -->
+    <div id="add-product-modal" class="modal">
+        <div class="modal-content">
+            <h2>Add Product to Master</h2>
+            <p class="form-hint">Barcode = product barcode (scanner). Legacy item name = 7 digits that appear in the LPN (before the last 3 digits).</p>
+            <div class="form-group">
+                <label>Barcode number:</label>
+                <input type="text" id="new-product-barcode" class="form-input" placeholder="Product barcode (for match lookup)">
+            </div>
+            <div class="form-group">
+                <label>Legacy item name (7 digits):</label>
+                <input type="text" id="new-product-legacy" class="form-input" placeholder="7 characters" maxlength="7">
+            </div>
+            <div class="form-group">
+                <label>Product name (mfg description):</label>
+                <input type="text" id="new-product-name" class="form-input" placeholder="Human-readable product name">
+            </div>
+            <div class="modal-buttons">
+                <button id="save-product-btn" class="btn-primary">Save Product</button>
+                <button id="cancel-add-product" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal (Email Oscar on error) -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <h2>Settings</h2>
+            <div class="settings-section">
+                <h3>Email on error</h3>
+                <p class="settings-note">When a mismatch is logged, send an email to Oscar. Enable below and set Oscar's email and SMTP details.</p>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="settings-email-on-error">
+                        Email Oscar when there is an error
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>Oscar's email (recipient)</label>
+                    <input type="email" id="settings-oscar-email" class="form-input" placeholder="oscar@example.com">
+                </div>
+                <h4 class="settings-subheading">Mailgun (optional – used if set)</h4>
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="settings-use-mailgun" checked>
+                        Use Mailgun to send
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>Mailgun API key</label>
+                    <input type="password" id="settings-mailgun-api-key" class="form-input" placeholder="key-xxx or API key" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>Mailgun domain (e.g. sandboxXXX.mailgun.org)</label>
+                    <input type="text" id="settings-mailgun-domain" class="form-input" placeholder="sandbox4674a5710eb34da582605823fdcd1081.mailgun.org">
+                </div>
+                <h4 class="settings-subheading">SMTP (used if Mailgun not set)</h4>
+                <div class="form-group">
+                    <label>SMTP host</label>
+                    <input type="text" id="settings-smtp-host" class="form-input" placeholder="e.g. smtp.gmail.com">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Port</label>
+                        <input type="number" id="settings-smtp-port" class="form-input" placeholder="587" min="1" max="65535">
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <label>
+                            <input type="checkbox" id="settings-smtp-secure">
+                            Use TLS (secure)
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>SMTP user (optional for some servers)</label>
+                    <input type="text" id="settings-smtp-user" class="form-input" placeholder="your@email.com" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>SMTP password (e.g. Gmail App Password)</label>
+                    <input type="password" id="settings-smtp-pass" class="form-input" placeholder="Leave blank to keep current" autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label>From address (optional, defaults to SMTP user)</label>
+                    <input type="email" id="settings-from-email" class="form-input" placeholder="e80-scanner@company.com">
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button id="settings-save-btn" class="btn-primary">Save</button>
+                <button id="settings-cancel-btn" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="export-modal" class="modal">
+        <div class="modal-content">
+            <h2>Export Data</h2>
+            <p class="export-note">Exports error/mismatch records. Uses current date range if set.</p>
+            <div class="form-group">
+                <label>From</label>
+                <input type="date" id="export-date-start" class="form-input">
+            </div>
+            <div class="form-group">
+                <label>To</label>
+                <input type="date" id="export-date-end" class="form-input">
+            </div>
+            <div class="modal-buttons">
+                <button id="export-csv-btn" class="btn-primary">Export CSV</button>
+                <button id="export-cancel-btn" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

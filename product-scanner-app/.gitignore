@@ -1,0 +1,9 @@
+node_modules/
+dist/
+data/
+*.db
+*.log
+.DS_Store
+*.exe
+*.dmg
+*.app
