@@ -110,6 +110,14 @@ product-scanner-app/
 **Permissions**: add the user running Electron to the `gpio` group, then reboot:  
 `sudo usermod -a -G gpio $USER`
 
+**Check that the Pi sees the button (same stack as the app — pigpio):**
+
+1. `sudo systemctl start pigpiod` and `pigs t` — should print a number (daemon OK).
+2. Quit the scanner app so nothing else is using the pin, then from `product-scanner-app/`:  
+   `node scripts/poll-gpio-pin.js 9 down`  
+   Hold the button: you should see `read = 1` (or `0` when released). Wrong pin? Try `17` if the wire is on physical pin 11 (BCM 17).
+3. One-shot: `pigs m 9 0; pigs pud 9 1; pigs r 9` — prints `0` or `1`.
+
 ## Raspberry Pi deployment
 
 This app is intended to run on a **Raspberry Pi** with scanners and the stack light connected.
