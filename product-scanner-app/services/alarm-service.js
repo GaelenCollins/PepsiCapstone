@@ -5,7 +5,10 @@
  *   1) onoff (sysfs) — older Pi OS
  *   2) pigpio pigs — Raspberry Pi OS Bookworm+ (no /sys/class/gpio); no Electron native rebuild needed
  *
- * Stack light default: BCM GPIO 17 (pin 11). Reset button: BCM GPIO 9 (pin 21) → GND.
+ * Stack light default: BCM GPIO 17 (physical pin 11 on 40-pin header).
+ * Reset default: BCM GPIO 9 (physical pin 21). Pin 11 is BCM 17 — do not use for reset if the light is on 17.
+ * Reset wiring: default expects pressed = GND (pull-up). If pressed = 3.3 V (idle low), set GPIO_RESET_ACTIVE_HIGH=1
+ * and use internal pull-down (pigpio); wire so released = low, pressed = high.
  *
  * Pigpio setup on Pi:
  *   sudo apt install pigpio
@@ -14,7 +17,8 @@
  *   sudo usermod -a -G gpio $USER   # then re-login
  *
  * Env: ENABLE_GPIO=0, GPIO_PIN=17, STACK_LIGHT_ACTIVE_LOW=1, GPIO_RESET_PIN=9,
- *      ENABLE_GPIO_RESET=0, GPIO_BACKEND=pigpio|onoff (force)
+ *      GPIO_RESET_ACTIVE_HIGH=1 (pressed reads 1 / 3.3 V; idle 0), ENABLE_GPIO_RESET=0,
+ *      GPIO_BACKEND=pigpio|onoff (force)
  */
 
 const { execFileSync } = require('child_process');
@@ -26,8 +30,8 @@ let gpioResetIn = null;
 let gpioBackend = null;
 let pigpioOutPin = -1;
 let pigpioResetPoll = null;
-/** Consecutive polls reading reset pin low (debounce / level-detect; edge-only missed some wiring). */
-let pigpioResetLowStreak = 0;
+/** Consecutive polls reading "pressed" level (debounce). */
+let pigpioResetPressStreak = 0;
 let gpioOutputReady = false;
 let gpioOutputSkip = false;
 let gpioOutputFailed = false;
@@ -50,6 +54,24 @@ function getResetPinNumber() {
 
 function activeLow() {
   return process.env.STACK_LIGHT_ACTIVE_LOW === '1' || process.env.STACK_LIGHT_ACTIVE_LOW === 'true';
+}
+
+/**
+ * True: idle low, pressed connects 3.3 V (read 1), internal pull-down.
+ * False: pull-up, pressed shorts to GND (read 0).
+ * Override: GPIO_RESET_ACTIVE_LOW=1 for GND switch; GPIO_RESET_ACTIVE_HIGH=0 to force low-active.
+ */
+function resetActiveHigh() {
+  const low = (process.env.GPIO_RESET_ACTIVE_LOW || '').toLowerCase();
+  if (low === '1' || low === 'true' || low === 'yes') return false;
+  const hi = (process.env.GPIO_RESET_ACTIVE_HIGH || '').toLowerCase();
+  if (hi === '0' || hi === 'false' || hi === 'no') return false;
+  if (hi === '1' || hi === 'true' || hi === 'yes') return true;
+  return true;
+}
+
+function resetPinPressed(reading) {
+  return resetActiveHigh() ? reading === 1 : reading === 0;
 }
 
 function pigs(args) {
@@ -221,12 +243,13 @@ function startPigpioResetPoll(resetPin) {
   if (pigpioResetPoll || !pigpioDaemonOk()) return;
   try {
     pigs(['m', String(resetPin), '0']);
-    pigs(['pud', String(resetPin), '2']);
+    // Active-low button: pull up so open = 1, GND press = 0. Active-high: pull down so open = 0, 3.3 V press = 1.
+    pigs(['pud', String(resetPin), resetActiveHigh() ? '1' : '2']);
   } catch (e) {
     console.warn('[Alarm] pigpio reset pin setup failed:', e.message);
     return;
   }
-  pigpioResetLowStreak = 0;
+  pigpioResetPressStreak = 0;
   pigpioResetPoll = setInterval(() => {
     let v;
     try {
@@ -237,21 +260,27 @@ function startPigpioResetPoll(resetPin) {
       return;
     }
     if (alarmActive) {
-      if (v === 0) {
-        pigpioResetLowStreak += 1;
-        if (pigpioResetLowStreak >= 3) {
-          pigpioResetLowStreak = 0;
+      if (resetPinPressed(v)) {
+        pigpioResetPressStreak += 1;
+        if (pigpioResetPressStreak >= 3) {
+          pigpioResetPressStreak = 0;
           clearAlarm();
           console.log('[Alarm] Cleared by GPIO reset button (BCM', resetPin + ', pigpio)');
         }
       } else {
-        pigpioResetLowStreak = 0;
+        pigpioResetPressStreak = 0;
       }
     } else {
-      pigpioResetLowStreak = 0;
+      pigpioResetPressStreak = 0;
     }
   }, 40);
-  console.log('[Alarm] pigpio: BCM', resetPin, 'reset button (poll)');
+  console.log(
+    '[Alarm] pigpio: BCM',
+    resetPin,
+    'reset button (poll,',
+    resetActiveHigh() ? 'active-HIGH pressed=1' : 'active-LOW pressed=Gnd',
+    ')'
+  );
   registerShutdown();
 }
 
@@ -284,7 +313,8 @@ function startAlarmResetButtonWatcher() {
 
   try {
     const { Gpio } = require('onoff');
-    gpioResetIn = new Gpio(resetPin, 'in', 'falling', { debounceTimeout: 120 });
+    const edge = resetActiveHigh() ? 'rising' : 'falling';
+    gpioResetIn = new Gpio(resetPin, 'in', edge, { debounceTimeout: 120 });
     gpioResetIn.watch((err) => {
       if (err) {
         console.error('[Alarm] Reset button watch error:', err.message);
