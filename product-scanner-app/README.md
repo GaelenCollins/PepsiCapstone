@@ -98,7 +98,7 @@ product-scanner-app/
 
 - **Default pin**: **BCM GPIO 17** (physical pin **11**). **BCM 10** (pin 19) is **SPI MOSI** and often causes **`EINVAL` on write** if SPI is on — use `GPIO_PIN=10 npm start` only if SPI is disabled and you wired pin 19. Wire your driver to **3.3 V logic** (GPIO is not 5 V tolerant).
 - **Electron on Pi:** hardware acceleration is disabled on Linux by default to reduce `GpuControl` / GPU crashes. Set `ELECTRON_DISABLE_GPU=0` before `npm start` to re-enable if needed.
-- **When**: `triggerAlarm()` runs when a mismatch is **logged** (after the 5 s delay). `clearAlarm()` runs on **Override** in the app.
+- **When**: `triggerAlarm()` runs when a mismatch is **logged** (after the 5 s delay). `clearAlarm()` runs on **Override** in the app, on a **scan match**, or on the **physical reset button**. The physical button also marks the **newest pending** mismatch as **override** (same as the Override button) and refreshes the stats table.
 - **Reset button (input, optional)**: default **BCM GPIO 9** (physical pin **21** on the 40-pin header — **not** pin 11; pin 11 is BCM **17**, the default stack light). **Default wiring**: idle **low** (0), pressed feeds **3.3 V** (read **1**); pigpio uses an internal **pull-down**. Pressing clears the stack light when the alarm is on. For a switch to **GND** instead (pull-up, press = 0), set **`GPIO_RESET_ACTIVE_LOW=1`** before `npm start`.
 - **Env (optional)**:
   - `ENABLE_GPIO=0` — disable GPIO (e.g. development on a PC); alarm still logs to console.

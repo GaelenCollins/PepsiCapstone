@@ -7,8 +7,7 @@
  *
  * Stack light default: BCM GPIO 17 (physical pin 11 on 40-pin header).
  * Reset default: BCM GPIO 9 (physical pin 21). Pin 11 is BCM 17 — do not use for reset if the light is on 17.
- * Reset wiring: default expects pressed = GND (pull-up). If pressed = 3.3 V (idle low), set GPIO_RESET_ACTIVE_HIGH=1
- * and use internal pull-down (pigpio); wire so released = low, pressed = high.
+ * Reset wiring default: idle low, pressed = 3.3 V (pull-down in pigpio). Switch to GND: GPIO_RESET_ACTIVE_LOW=1.
  *
  * Pigpio setup on Pi:
  *   sudo apt install pigpio
@@ -19,6 +18,7 @@
  * Env: ENABLE_GPIO=0, GPIO_PIN=17, STACK_LIGHT_ACTIVE_LOW=1, GPIO_RESET_PIN=9,
  *      GPIO_RESET_ACTIVE_HIGH=1 (pressed reads 1 / 3.3 V; idle 0), ENABLE_GPIO_RESET=0,
  *      GPIO_BACKEND=pigpio|onoff (force)
+ * Physical reset: clears light and overrides latest pending mismatch (resolvedBy gpio_reset), like UI Override.
  */
 
 const { execFileSync } = require('child_process');
@@ -37,6 +37,12 @@ let gpioOutputSkip = false;
 let gpioOutputFailed = false;
 let resetWatcherStarted = false;
 let shutdownRegistered = false;
+/** Optional: main process notifies renderer after hardware reset overrides latest pending. */
+let notifyMismatchesChanged = null;
+
+function setMismatchesChangedNotify(fn) {
+  notifyMismatchesChanged = typeof fn === 'function' ? fn : null;
+}
 
 function getGpioPinNumber() {
   const n = parseInt(process.env.GPIO_PIN || '17', 10);
@@ -264,8 +270,9 @@ function startPigpioResetPoll(resetPin) {
         pigpioResetPressStreak += 1;
         if (pigpioResetPressStreak >= 3) {
           pigpioResetPressStreak = 0;
-          clearAlarm();
-          console.log('[Alarm] Cleared by GPIO reset button (BCM', resetPin + ', pigpio)');
+          clearAlarm({ overrideLatestPending: true }).then(() => {
+            console.log('[Alarm] Cleared by GPIO reset (override latest pending) BCM', resetPin, 'pigpio');
+          });
         }
       } else {
         pigpioResetPressStreak = 0;
@@ -321,8 +328,9 @@ function startAlarmResetButtonWatcher() {
         return;
       }
       if (alarmActive) {
-        clearAlarm();
-        console.log('[Alarm] Cleared by GPIO reset button (BCM', resetPin + ')');
+        clearAlarm({ overrideLatestPending: true }).then(() => {
+          console.log('[Alarm] Cleared by GPIO reset (override latest pending) BCM', resetPin);
+        });
       }
     });
     console.log('[Alarm] onoff: BCM', resetPin, 'reset button');
@@ -342,11 +350,41 @@ function triggerAlarm() {
   console.log('[Alarm] TRIGGERED - mismatch detected');
 }
 
-function clearAlarm() {
+/**
+ * @param {{ overrideLatestPending?: boolean }} [opts] If true (physical reset only), mark newest pending mismatch as override like the UI.
+ * @returns {Promise<void>}
+ */
+function clearAlarm(opts) {
+  const o = opts && typeof opts === 'object' ? opts : {};
   alarmActive = false;
-  initGpio();
-  writeAlarmState(false);
-  console.log('[Alarm] CLEARED');
+
+  const finish = () => {
+    initGpio();
+    writeAlarmState(false);
+    console.log('[Alarm] CLEARED');
+  };
+
+  if (o.overrideLatestPending) {
+    const { overrideLatestPendingMismatch } = require('./database');
+    return overrideLatestPendingMismatch('gpio_reset')
+      .then((n) => {
+        if (n && notifyMismatchesChanged) {
+          try {
+            notifyMismatchesChanged();
+          } catch (e) {
+            console.warn('[Alarm] notify mismatches changed failed:', e.message);
+          }
+        }
+        finish();
+      })
+      .catch((e) => {
+        console.error('[Alarm] override latest pending failed:', e.message);
+        finish();
+      });
+  }
+
+  finish();
+  return Promise.resolve();
 }
 
 function isAlarmActive() {
@@ -358,5 +396,6 @@ module.exports = {
   clearAlarm,
   isAlarmActive,
   startAlarmResetButtonWatcher,
-  initStackLightGpioAtStartup
+  initStackLightGpioAtStartup,
+  setMismatchesChangedNotify
 };

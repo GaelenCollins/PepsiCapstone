@@ -7,7 +7,13 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const os = require('os');
-const { triggerAlarm, clearAlarm, startAlarmResetButtonWatcher, initStackLightGpioAtStartup } = require('./services/alarm-service');
+const {
+  triggerAlarm,
+  clearAlarm,
+  startAlarmResetButtonWatcher,
+  initStackLightGpioAtStartup,
+  setMismatchesChangedNotify
+} = require('./services/alarm-service');
 const { initDatabase, logMismatch, getMismatches, getStatistics, overrideMismatch } = require('./services/database');
 const { getErrorTypeLabel } = require('./services/error-types');
 const { getEmailConfig, setEmailConfig, sendErrorNotificationToOscar } = require('./services/email-service');
@@ -159,7 +165,7 @@ function startViewerServer() {
           return;
         }
         await overrideMismatch(body.id);
-        clearAlarm();
+        await clearAlarm();
         json({ ok: true });
       } catch (e) {
         err(500, e.message);
@@ -294,6 +300,11 @@ function timeAgo(date) {
 app.whenReady().then(() => {
   initDatabase();
   createWindow();
+  setMismatchesChangedNotify(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('mismatches-changed');
+    }
+  });
   startViewerServer();
   // Stack light first so alarm-service picks pigpio vs onoff before reset watcher runs
   try {
@@ -397,15 +408,15 @@ ipcMain.handle('override-mismatch', async (event, mismatchId) => {
   }
   try {
     await overrideMismatch(mismatchId);
-    clearAlarm();
+    await clearAlarm();
     return true;
   } catch (error) {
     throw error;
   }
 });
 
-ipcMain.handle('clear-alarm', () => {
-  clearAlarm();
+ipcMain.handle('clear-alarm', async () => {
+  await clearAlarm();
   return true;
 });
 

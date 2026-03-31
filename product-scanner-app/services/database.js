@@ -161,10 +161,38 @@ function overrideMismatch(id) {
   });
 }
 
+/** Most recent pending row by timestamp (same status as UI Override). */
+function overrideLatestPendingMismatch(resolvedBy = 'gpio_reset') {
+  return new Promise((resolve, reject) => {
+    try {
+      let latest = null;
+      for (const r of mismatches) {
+        if ((r.status || 'pending') !== 'pending') continue;
+        const ts = String(r.timestamp || '');
+        if (!latest || ts.localeCompare(String(latest.timestamp || '')) > 0) {
+          latest = r;
+        }
+      }
+      if (!latest) {
+        resolve(0);
+        return;
+      }
+      latest.status = 'override';
+      latest.resolvedAt = new Date().toISOString();
+      latest.resolvedBy = resolvedBy;
+      saveStore();
+      resolve(1);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
 module.exports = {
   initDatabase,
   logMismatch,
   getMismatches,
   getStatistics,
-  overrideMismatch
+  overrideMismatch,
+  overrideLatestPendingMismatch
 };

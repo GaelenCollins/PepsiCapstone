@@ -185,6 +185,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateScannerStatusLines();
   pushViewerState();
   setInterval(pushViewerState, 2500);
+  ipcRenderer.on('mismatches-changed', function() {
+    loadData()
+      .then(function() {
+        updateUI();
+        updateAdvancedStatistics();
+      })
+      .catch(function() {});
+  });
 });
 
 function setDefaultDates() {
