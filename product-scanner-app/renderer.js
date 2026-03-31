@@ -58,6 +58,9 @@ function viewerInvoke(channel, arg) {
     if (q.endDate) params.set('endDate', q.endDate);
     return fetch('/api/statistics?' + params.toString()).then(function(r) { return r.json(); });
   }
+  if (channel === 'clear-alarm') {
+    return Promise.resolve(true);
+  }
   if (channel === 'viewer-state' || channel === 'log-scan' || channel === 'log-mismatch' || channel === 'lookup-barcode') {
     return Promise.resolve(null);
   }
@@ -96,6 +99,11 @@ let lastScanTime = 0;  // timestamp of last successful scan (for "No code for Xs
 const MISMATCH_DELAY_MS = 5000;  // wait 5s before showing mismatch (changeover buffer)
 let pendingMismatchTimeoutId = null;
 let pendingMismatchData = null;
+
+/** Stack light clears via main process; mismatch path calls triggerAlarm but match never did until we added this. */
+function clearPhysicalAlarmOnMatch() {
+  ipcRenderer.invoke('clear-alarm').catch(function() {});
+}
 
 // PRODUCT SCANNER NEVER SCANS A LETTER. If the code has ANY letter (A-Z, a-z), it is an LPN — NEVER treat it as a product barcode.
 function codeHasLetters(s) {
@@ -347,6 +355,7 @@ function setupBarcodeCapture() {
               clearPendingMismatchState();
             }
             updateScannerBoxes(lastScannedLpn, lastScannedProduct || '—', 'match');
+            clearPhysicalAlarmOnMatch();
           } else {
             if (!pendingMismatchTimeoutId) {
               showPendingMismatchState();
@@ -388,6 +397,7 @@ function setupBarcodeCapture() {
                   clearPendingMismatchState();
                 }
                 updateScannerBoxes(lastScannedLpn, lastScannedProduct || '—', 'match');
+                clearPhysicalAlarmOnMatch();
               } else {
                 if (!pendingMismatchTimeoutId) {
                   showPendingMismatchState();

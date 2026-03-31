@@ -26,7 +26,8 @@ let gpioResetIn = null;
 let gpioBackend = null;
 let pigpioOutPin = -1;
 let pigpioResetPoll = null;
-let pigpioLastResetRead = 1;
+/** Consecutive polls reading reset pin low (debounce / level-detect; edge-only missed some wiring). */
+let pigpioResetLowStreak = 0;
 let gpioOutputReady = false;
 let gpioOutputSkip = false;
 let gpioOutputFailed = false;
@@ -225,7 +226,7 @@ function startPigpioResetPoll(resetPin) {
     console.warn('[Alarm] pigpio reset pin setup failed:', e.message);
     return;
   }
-  pigpioLastResetRead = 1;
+  pigpioResetLowStreak = 0;
   pigpioResetPoll = setInterval(() => {
     let v;
     try {
@@ -235,11 +236,20 @@ function startPigpioResetPoll(resetPin) {
     } catch {
       return;
     }
-    if (pigpioLastResetRead === 1 && v === 0 && alarmActive) {
-      clearAlarm();
-      console.log('[Alarm] Cleared by GPIO reset button (BCM', resetPin + ', pigpio)');
+    if (alarmActive) {
+      if (v === 0) {
+        pigpioResetLowStreak += 1;
+        if (pigpioResetLowStreak >= 3) {
+          pigpioResetLowStreak = 0;
+          clearAlarm();
+          console.log('[Alarm] Cleared by GPIO reset button (BCM', resetPin + ', pigpio)');
+        }
+      } else {
+        pigpioResetLowStreak = 0;
+      }
+    } else {
+      pigpioResetLowStreak = 0;
     }
-    pigpioLastResetRead = v;
   }, 40);
   console.log('[Alarm] pigpio: BCM', resetPin, 'reset button (poll)');
   registerShutdown();
