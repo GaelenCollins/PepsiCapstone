@@ -116,7 +116,7 @@ product-scanner-app/
 2. Quit the scanner app so nothing else is using the pin, then from `product-scanner-app/`:  
    `node scripts/poll-gpio-pin.js 9 down`  
    Hold the button: you should see `read = 1` (or `0` when released). Wrong pin? Try `17` if the wire is on physical pin 11 (BCM 17).
-3. One-shot: `pigs m 9 0; pigs pud 9 1; pigs r 9` — prints `0` or `1`.
+3. One-shot: `pigs m 9 0; pigs pud 9 d; pigs r 9` — prints `0` or `1` (`pud` uses **`d`**/**`u`**/**`o`**, not numbers).
 
 ## Raspberry Pi deployment
 

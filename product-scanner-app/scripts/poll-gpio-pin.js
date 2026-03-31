@@ -19,7 +19,8 @@ const { execFileSync } = require('child_process');
 
 const pin = process.argv[2] || '9';
 const pullArg = (process.argv[3] || 'down').toLowerCase();
-const pudMap = { down: '1', up: '2', off: '0' };
+// pigs pud: d = pull-down, u = pull-up, o = off (numeric codes are invalid)
+const pudMap = { down: 'd', up: 'u', off: 'o' };
 const pud = pudMap[pullArg];
 if (!pud) {
   console.error('pull must be down, up, or off');
@@ -43,7 +44,7 @@ try {
   process.exit(1);
 }
 
-console.log(`BCM ${pin}: mode input, pud ${pullArg} (${pud === '1' ? 'pull-down' : pud === '2' ? 'pull-up' : 'none'})`);
+console.log(`BCM ${pin}: mode input, pud ${pullArg} (${pud === 'd' ? 'pull-down' : pud === 'u' ? 'pull-up' : 'none'})`);
 console.log('Expected for your wiring (idle 0 V, pressed 3.3 V): pull-down, idle read 0, pressed read 1');
 console.log('Ctrl+C to stop.\n');
 

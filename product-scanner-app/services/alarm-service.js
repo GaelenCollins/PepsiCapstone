@@ -249,8 +249,9 @@ function startPigpioResetPoll(resetPin) {
   if (pigpioResetPoll || !pigpioDaemonOk()) return;
   try {
     pigs(['m', String(resetPin), '0']);
-    // Active-low button: pull up so open = 1, GND press = 0. Active-high: pull down so open = 0, 3.3 V press = 1.
-    pigs(['pud', String(resetPin), resetActiveHigh() ? '1' : '2']);
+    // pigs pud uses letters: d=down, u=up, o=off (not 1/2 — those return "bad parameter").
+    // Active-low (GND press): pull-up. Active-high (3.3 V press): pull-down.
+    pigs(['pud', String(resetPin), resetActiveHigh() ? 'd' : 'u']);
   } catch (e) {
     console.warn('[Alarm] pigpio reset pin setup failed:', e.message);
     return;
