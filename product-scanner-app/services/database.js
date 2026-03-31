@@ -1,171 +1,170 @@
-const sqlite3 = require('sqlite3').verbose();
+/**
+ * Mismatch log — JSON file store (no native sqlite3; fast npm install on Pi / no electron-rebuild for DB).
+ * File: data/mismatches-store.json (gitignored with data/)
+ * If you have an old mismatches.db, it is not auto-imported; copy data manually if needed.
+ */
+
 const path = require('path');
 const fs = require('fs');
 
-let db;
+const storePath = path.join(__dirname, '..', 'data', 'mismatches-store.json');
+
+let mismatches = [];
+let nextId = 1;
+
+function ensureDataDir() {
+  const dir = path.dirname(storePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
+
+function loadStore() {
+  try {
+    const raw = fs.readFileSync(storePath, 'utf8');
+    const data = JSON.parse(raw);
+    if (Array.isArray(data)) {
+      mismatches = data;
+    } else if (data && Array.isArray(data.mismatches)) {
+      mismatches = data.mismatches;
+    } else {
+      mismatches = [];
+    }
+  } catch (e) {
+    mismatches = [];
+  }
+  nextId = mismatches.reduce((max, r) => {
+    const n = parseInt(String(r.id), 10);
+    return Number.isFinite(n) ? Math.max(max, n) : max;
+  }, 0) + 1;
+}
+
+function saveStore() {
+  ensureDataDir();
+  fs.writeFileSync(storePath, JSON.stringify(mismatches, null, 2), 'utf8');
+}
+
+function datePart(iso) {
+  if (!iso) return '';
+  const s = String(iso);
+  return s.length >= 10 ? s.slice(0, 10) : s;
+}
+
+function localTodayYmd() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function rowToApi(row) {
+  return {
+    id: String(row.id),
+    expected: row.expected,
+    actual: row.actual,
+    errorType: row.errorType || row.error_type || 'mismatch',
+    timestamp: row.timestamp,
+    status: row.status,
+    resolvedAt: row.resolvedAt || row.resolved_at,
+    resolvedBy: row.resolvedBy || row.resolved_by
+  };
+}
 
 function initDatabase() {
-    const dbPath = path.join(__dirname, '..', 'data', 'mismatches.db');
-    const dataDir = path.dirname(dbPath);
-    
-    // Create data directory if it doesn't exist
-    if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-    }
-    
-    db = new sqlite3.Database(dbPath, (err) => {
-        if (err) {
-            console.error('Error opening database:', err);
-        } else {
-            console.log('Database connected');
-            createTables();
-        }
-    });
-}
-
-function createTables() {
-    db.run(`
-        CREATE TABLE IF NOT EXISTS mismatches (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            expected TEXT NOT NULL,
-            actual TEXT NOT NULL,
-            error_type TEXT DEFAULT 'mismatch',
-            timestamp TEXT NOT NULL,
-            status TEXT DEFAULT 'pending',
-            resolved_at TEXT,
-            resolved_by TEXT
-        )
-    `, (err) => {
-        if (err) {
-            console.error('Error creating table:', err);
-        } else {
-            addErrorTypeColumnIfMissing();
-        }
-    });
-}
-
-function addErrorTypeColumnIfMissing() {
-    db.run(`ALTER TABLE mismatches ADD COLUMN error_type TEXT DEFAULT 'mismatch'`, (err) => {
-        if (err && !err.message.includes('duplicate column')) {
-            console.error('Error adding error_type column:', err);
-        }
-    });
+  ensureDataDir();
+  loadStore();
+  console.log('Mismatch store ready (JSON):', mismatches.length, 'records');
 }
 
 function logMismatch(mismatchData) {
-    return new Promise((resolve, reject) => {
-        const { expected, actual, errorType = 'mismatch', timestamp, status = 'pending' } = mismatchData;
-        
-        db.run(
-            `INSERT INTO mismatches (expected, actual, error_type, timestamp, status) 
-             VALUES (?, ?, ?, ?, ?)`,
-            [expected, actual, errorType, timestamp, status],
-            function(err) {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(this.lastID);
-                }
-            }
-        );
-    });
+  return new Promise((resolve, reject) => {
+    try {
+      const { expected, actual, errorType = 'mismatch', timestamp, status = 'pending' } = mismatchData;
+      const row = {
+        id: nextId++,
+        expected: expected != null ? String(expected) : '',
+        actual: actual != null ? String(actual) : '',
+        errorType,
+        timestamp: timestamp || new Date().toISOString(),
+        status,
+        resolvedAt: null,
+        resolvedBy: null
+      };
+      mismatches.push(row);
+      saveStore();
+      resolve(row.id);
+    } catch (e) {
+      reject(e);
+    }
+  });
 }
 
 function getMismatches(limit = 500, startDate = null, endDate = null) {
-    return new Promise((resolve, reject) => {
-        let sql = `SELECT * FROM mismatches WHERE 1=1`;
-        const params = [];
-
-        if (startDate) {
-            sql += ` AND date(timestamp) >= date(?)`;
-            params.push(startDate);
-        }
-        if (endDate) {
-            sql += ` AND date(timestamp) <= date(?)`;
-            params.push(endDate);
-        }
-        sql += ` ORDER BY timestamp DESC LIMIT ?`;
-        params.push(limit);
-
-        db.all(sql, params, (err, rows) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve((rows || []).map(row => ({
-                    id: row.id.toString(),
-                    expected: row.expected,
-                    actual: row.actual,
-                    errorType: row.error_type || 'mismatch',
-                    timestamp: row.timestamp,
-                    status: row.status,
-                    resolvedAt: row.resolved_at,
-                    resolvedBy: row.resolved_by
-                })));
-            }
-        });
-    });
+  return new Promise((resolve) => {
+    let list = [...mismatches];
+    if (startDate) {
+      list = list.filter((r) => datePart(r.timestamp) >= startDate);
+    }
+    if (endDate) {
+      list = list.filter((r) => datePart(r.timestamp) <= endDate);
+    }
+    list.sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+    if (limit && list.length > limit) {
+      list = list.slice(0, limit);
+    }
+    resolve(list.map(rowToApi));
+  });
 }
 
 function getStatistics(startDate = null, endDate = null) {
-    return new Promise((resolve, reject) => {
-        let sql = `SELECT 
-                COUNT(*) as total,
-                SUM(CASE WHEN date(timestamp) = date('now') THEN 1 ELSE 0 END) as today,
-                SUM(CASE WHEN status IN ('sent', 'override') THEN 1 ELSE 0 END) as resolved,
-                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
-             FROM mismatches`;
-        const params = [];
-        const conditions = [];
-        if (startDate) {
-            conditions.push('date(timestamp) >= date(?)');
-            params.push(startDate);
-        }
-        if (endDate) {
-            conditions.push('date(timestamp) <= date(?)');
-            params.push(endDate);
-        }
-        if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-
-        db.all(sql, params, (err, rows) => {
-            if (err) {
-                reject(err);
-            } else {
-                const stats = (rows && rows[0]) ? rows[0] : { total: 0, today: 0, resolved: 0, pending: 0 };
-                resolve({
-                    total: stats.total || 0,
-                    today: stats.today || 0,
-                    resolved: stats.resolved || 0,
-                    pending: stats.pending || 0
-                });
-            }
-        });
-    });
+  return new Promise((resolve) => {
+    let list = [...mismatches];
+    if (startDate) {
+      list = list.filter((r) => datePart(r.timestamp) >= startDate);
+    }
+    if (endDate) {
+      list = list.filter((r) => datePart(r.timestamp) <= endDate);
+    }
+    const today = localTodayYmd();
+    let total = list.length;
+    let todayCount = 0;
+    let resolved = 0;
+    let pending = 0;
+    for (const r of list) {
+      if (datePart(r.timestamp) === today) todayCount++;
+      const st = r.status || 'pending';
+      if (st === 'pending') pending++;
+      if (st === 'sent' || st === 'override') resolved++;
+    }
+    resolve({ total, today: todayCount, resolved, pending });
+  });
 }
 
 function overrideMismatch(id) {
-    return new Promise((resolve, reject) => {
-        db.run(
-            `UPDATE mismatches 
-             SET status = 'override', 
-                 resolved_at = datetime('now'),
-                 resolved_by = 'operator'
-             WHERE id = ?`,
-            [id],
-            function(err) {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(this.changes);
-                }
-            }
-        );
-    });
+  return new Promise((resolve, reject) => {
+    try {
+      const sid = String(id);
+      const row = mismatches.find((r) => String(r.id) === sid);
+      if (!row) {
+        resolve(0);
+        return;
+      }
+      row.status = 'override';
+      row.resolvedAt = new Date().toISOString();
+      row.resolvedBy = 'operator';
+      saveStore();
+      resolve(1);
+    } catch (e) {
+      reject(e);
+    }
+  });
 }
 
 module.exports = {
-    initDatabase,
-    logMismatch,
-    getMismatches,
-    getStatistics,
-    overrideMismatch
+  initDatabase,
+  logMismatch,
+  getMismatches,
+  getStatistics,
+  overrideMismatch
 };

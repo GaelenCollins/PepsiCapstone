@@ -6,8 +6,8 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
-    "postinstall": "electron-rebuild -f -w sqlite3 && (electron-rebuild -f -w onoff || true)",
-    "rebuild": "electron-rebuild -f -w sqlite3 && (electron-rebuild -f -w onoff || true)"
+    "postinstall": "electron-rebuild -f -w onoff || true",
+    "rebuild": "electron-rebuild -f -w onoff || true"
   },
   "keywords": [
     "electron",
@@ -25,8 +25,7 @@
     "electron-builder": "^24.6.4"
   },
   "dependencies": {
-    "nodemailer": "^6.10.1",
-    "sqlite3": "^5.1.6"
+    "nodemailer": "^6.10.1"
   },
   "optionalDependencies": {
     "onoff": "^6.0.3"

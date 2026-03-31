@@ -77,7 +77,7 @@ product-scanner-app/
 ├── services/               # Backend modules
 │   ├── alarm-service.js    # Physical alarm (stub for hardware)
 │   ├── barcode-lookup-service.js  # Cache + UPCitemDB / Open Food Facts
-│   ├── database.js         # SQLite (mismatches, stats)
+│   ├── database.js         # JSON file store for mismatches/stats (no native sqlite)
 │   ├── email-service.js    # Email Oscar on error (placeholder)
 │   ├── error-types.js      # Labels: match, lpn_missing, lpn_invalid_sku, lpn_wrong_product
 │   └── scan-log.js         # Append scan log (JSONL)
@@ -87,7 +87,7 @@ product-scanner-app/
 │   ├── email-config.json
 │   ├── barcode-cache.json
 │   ├── scan-log.jsonl
-│   └── mismatches.db
+│   └── mismatches-store.json  # error history (JSON; old mismatches.db not auto-imported)
 ├── assets/                 # Logos, icon
 └── scripts/                # Helper scripts (e.g. fix-electron-sigbus.sh)
 ```
