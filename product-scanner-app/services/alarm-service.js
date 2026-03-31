@@ -37,7 +37,7 @@ let gpioOutputSkip = false;
 let gpioOutputFailed = false;
 let resetWatcherStarted = false;
 let shutdownRegistered = false;
-/** Optional: main process notifies renderer after hardware reset overrides latest pending. */
+/** Optional: main notifies renderer (payload e.g. { physicalReset: true } after GPIO reset button). */
 let notifyMismatchesChanged = null;
 
 function setMismatchesChangedNotify(fn) {
@@ -358,32 +358,46 @@ function clearAlarm(opts) {
   const o = opts && typeof opts === 'object' ? opts : {};
   alarmActive = false;
 
-  const finish = () => {
+  /** Always clear the stack light immediately — do not wait on disk/DB (was leaving LED red if async lagged). */
+  function clearGpioNow() {
     initGpio();
     writeAlarmState(false);
     console.log('[Alarm] CLEARED');
-  };
-
-  if (o.overrideLatestPending) {
-    const { overrideLatestPendingMismatch } = require('./database');
-    return overrideLatestPendingMismatch('gpio_reset')
-      .then((n) => {
-        if (n && notifyMismatchesChanged) {
-          try {
-            notifyMismatchesChanged();
-          } catch (e) {
-            console.warn('[Alarm] notify mismatches changed failed:', e.message);
-          }
-        }
-        finish();
-      })
-      .catch((e) => {
-        console.error('[Alarm] override latest pending failed:', e.message);
-        finish();
-      });
   }
 
-  finish();
+  clearGpioNow();
+
+  if (o.overrideLatestPending) {
+    let dbOk = false;
+    try {
+      const { overrideLatestPendingMismatch } = require('./database');
+      return overrideLatestPendingMismatch('gpio_reset')
+        .then((n) => {
+          dbOk = !!n;
+        })
+        .catch((e) => {
+          console.error('[Alarm] override latest pending failed:', e.message);
+        })
+        .finally(() => {
+          if (notifyMismatchesChanged) {
+            try {
+              notifyMismatchesChanged({ physicalReset: true, overrideRow: dbOk });
+            } catch (e) {
+              console.warn('[Alarm] notify mismatches changed failed:', e.message);
+            }
+          }
+        });
+    } catch (e) {
+      console.error('[Alarm] override latest pending require failed:', e.message);
+      if (notifyMismatchesChanged) {
+        try {
+          notifyMismatchesChanged({ physicalReset: true, overrideRow: false });
+        } catch (_) {}
+      }
+      return Promise.resolve();
+    }
+  }
+
   return Promise.resolve();
 }
 

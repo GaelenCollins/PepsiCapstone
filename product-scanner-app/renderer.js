@@ -185,11 +185,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateScannerStatusLines();
   pushViewerState();
   setInterval(pushViewerState, 2500);
-  ipcRenderer.on('mismatches-changed', function() {
+  ipcRenderer.on('mismatches-changed', function(_ev, payload) {
     loadData()
       .then(function() {
         updateUI();
         updateAdvancedStatistics();
+        if (payload && payload.physicalReset && lastScannedLpn && lastScannedProduct) {
+          clearPendingMismatchState();
+          updateScannerBoxes(lastScannedLpn, lastScannedProduct, 'match');
+        }
       })
       .catch(function() {});
   });

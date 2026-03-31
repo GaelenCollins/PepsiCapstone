@@ -300,9 +300,9 @@ function timeAgo(date) {
 app.whenReady().then(() => {
   initDatabase();
   createWindow();
-  setMismatchesChangedNotify(() => {
+  setMismatchesChangedNotify((payload) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('mismatches-changed');
+      mainWindow.webContents.send('mismatches-changed', payload || {});
     }
   });
   startViewerServer();
