@@ -1,25 +1,32 @@
 /**
- * Physical stack light / alarm on Raspberry Pi GPIO + optional reset button.
+ * Physical stack light + reset button on Raspberry Pi.
  *
- * Stack light (output):
- *   Default BCM GPIO 17 (physical pin 11 on 40-pin header). BCM 10 is SPI MOSI and often causes EINVAL on write — use 17 unless you know SPI is off and you wired pin 19.
+ * Backends (auto):
+ *   1) onoff (sysfs) — older Pi OS
+ *   2) pigpio pigs — Raspberry Pi OS Bookworm+ (no /sys/class/gpio); no Electron native rebuild needed
  *
- * Reset button (input, optional):
- *   Default BCM GPIO 9 (physical pin 21). Wire: one side to GPIO, other to GND (internal pull-up).
- *   Press clears the stack light (same as clear-alarm in the app). Does not change DB / override.
+ * Stack light default: BCM GPIO 17 (pin 11). Reset button: BCM GPIO 9 (pin 21) → GND.
  *
- * Env (optional):
- *   ENABLE_GPIO=0          — disable all GPIO (stack light + reset button)
- *   GPIO_PIN=17            — stack light output (BCM); use 17 if 10 fails (SPI/MOSI) or EINVAL on write
- *   STACK_LIGHT_ACTIVE_LOW=1 — alarm ON = GPIO LOW
- *   GPIO_RESET_PIN=9       — reset button input (BCM); set empty or ENABLE_GPIO_RESET=0 to disable
- *   ENABLE_GPIO_RESET=0    — disable only the reset button (keep stack light GPIO)
+ * Pigpio setup on Pi:
+ *   sudo apt install pigpio
+ *   sudo systemctl enable pigpiod
+ *   sudo systemctl start pigpiod
+ *   sudo usermod -a -G gpio $USER   # then re-login
+ *
+ * Env: ENABLE_GPIO=0, GPIO_PIN=17, STACK_LIGHT_ACTIVE_LOW=1, GPIO_RESET_PIN=9,
+ *      ENABLE_GPIO_RESET=0, GPIO_BACKEND=pigpio|onoff (force)
  */
+
+const { execFileSync } = require('child_process');
 
 let alarmActive = false;
 let gpioOut = null;
 let gpioResetIn = null;
-/** Output GPIO: only set true after successful export; false = not tried yet or failed */
+/** @type {'onoff'|'pigpio'|null} */
+let gpioBackend = null;
+let pigpioOutPin = -1;
+let pigpioResetPoll = null;
+let pigpioLastResetRead = 1;
 let gpioOutputReady = false;
 let gpioOutputSkip = false;
 let gpioOutputFailed = false;
@@ -44,7 +51,54 @@ function activeLow() {
   return process.env.STACK_LIGHT_ACTIVE_LOW === '1' || process.env.STACK_LIGHT_ACTIVE_LOW === 'true';
 }
 
+function pigs(args) {
+  execFileSync('pigs', args, { stdio: ['ignore', 'pipe', 'pipe'], timeout: 3000, encoding: 'utf8' });
+}
+
+function pigpioDaemonOk() {
+  try {
+    execFileSync('pigs', ['t'], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 2000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function initPigpioOutput(pin) {
+  if (!pigpioDaemonOk()) {
+    console.warn('[Alarm] pigpio daemon not running. Install and start: sudo apt install pigpio && sudo systemctl start pigpiod');
+    return false;
+  }
+  try {
+    pigs(['m', String(pin), '1']);
+    const startLow = activeLow() ? 1 : 0;
+    pigs(['w', String(pin), String(startLow)]);
+    gpioBackend = 'pigpio';
+    pigpioOutPin = pin;
+    gpioOutputReady = true;
+    console.log('[Alarm] pigpio: BCM', pin, 'stack light (active', activeLow() ? 'LOW' : 'HIGH', ')');
+    return true;
+  } catch (e) {
+    console.warn('[Alarm] pigpio stack light failed:', e.message);
+    return false;
+  }
+}
+
+function writePigpioOut(on) {
+  if (pigpioOutPin < 0) return;
+  const high = activeLow() ? !on : on;
+  try {
+    pigs(['w', String(pigpioOutPin), high ? '1' : '0']);
+  } catch (e) {
+    console.error('[Alarm] pigpio write failed:', e.message);
+  }
+}
+
 function writeAlarmState(on) {
+  if (gpioBackend === 'pigpio') {
+    writePigpioOut(on);
+    return;
+  }
   if (!gpioOut) return;
   const high = activeLow() ? !on : on;
   try {
@@ -58,6 +112,10 @@ function registerShutdown() {
   if (shutdownRegistered) return;
   shutdownRegistered = true;
   function shutdown() {
+    if (pigpioResetPoll) {
+      clearInterval(pigpioResetPoll);
+      pigpioResetPoll = null;
+    }
     if (gpioResetIn) {
       try {
         gpioResetIn.unwatch();
@@ -66,6 +124,14 @@ function registerShutdown() {
         console.warn('[Alarm] Reset GPIO shutdown:', err.message);
       }
       gpioResetIn = null;
+    }
+    if (gpioBackend === 'pigpio' && pigpioOutPin >= 0) {
+      try {
+        const off = activeLow() ? 1 : 0;
+        pigs(['w', String(pigpioOutPin), String(off)]);
+      } catch (_) {}
+      pigpioOutPin = -1;
+      gpioBackend = null;
     }
     if (gpioOut) {
       try {
@@ -82,7 +148,8 @@ function registerShutdown() {
 }
 
 function initGpio() {
-  if (gpioOutputSkip || gpioOutputReady || gpioOutputFailed) return;
+  if (gpioOutputSkip || gpioOutputReady) return;
+  if (gpioOutputFailed) return;
 
   if (process.env.ENABLE_GPIO === '0') {
     gpioOutputSkip = true;
@@ -92,76 +159,116 @@ function initGpio() {
 
   if (process.platform !== 'linux') {
     gpioOutputSkip = true;
-    console.log('[Alarm] GPIO skipped (not Linux — use Raspberry Pi for stack light)');
+    console.log('[Alarm] GPIO skipped (not Linux)');
     return;
   }
 
-  let pin;
-  try {
-    const { Gpio } = require('onoff');
-    pin = getGpioPinNumber();
-    gpioOut = new Gpio(pin, 'out');
-  } catch (e) {
-    gpioOut = null;
-    gpioOutputFailed = true;
-    console.warn('[Alarm] Stack light GPIO export failed:', e.message);
-    console.warn('[Alarm] Hint: sudo usermod -a -G gpio $USER then reboot; npx electron-rebuild -f -w onoff');
-    registerShutdown();
+  const force = (process.env.GPIO_BACKEND || '').toLowerCase();
+  const pin = getGpioPinNumber();
+
+  if (force === 'pigpio') {
+    if (initPigpioOutput(pin)) {
+      registerShutdown();
+    } else {
+      gpioOutputFailed = true;
+      registerShutdown();
+    }
     return;
   }
+
+  if (force !== 'onoff') {
+    if (initPigpioOutput(pin)) {
+      registerShutdown();
+      return;
+    }
+  }
+
   try {
+    const { Gpio } = require('onoff');
+    gpioOut = new Gpio(pin, 'out');
     gpioOut.writeSync(activeLow() ? 1 : 0);
+    gpioBackend = 'onoff';
     gpioOutputReady = true;
-    console.log('[Alarm] GPIO BCM', pin, 'ready for stack light (active', activeLow() ? 'LOW' : 'HIGH', ')');
+    console.log('[Alarm] onoff: BCM', pin, 'stack light (active', activeLow() ? 'LOW' : 'HIGH', ')');
   } catch (e) {
-    try {
-      gpioOut.unexport();
-    } catch (_) {}
     gpioOut = null;
+    console.warn('[Alarm] onoff stack light failed:', e.message);
+    if (force === 'onoff') {
+      gpioOutputFailed = true;
+      registerShutdown();
+      return;
+    }
+    if (initPigpioOutput(pin)) {
+      registerShutdown();
+      return;
+    }
     gpioOutputFailed = true;
-    console.warn('[Alarm] Stack light GPIO write failed (often SPI pin conflict or Bookworm sysfs):', e.message);
-    console.warn('[Alarm] Try: GPIO_PIN=17 npm start   or disable SPI in raspi-config, or wire stack light to BCM 17 (pin 11).');
+    console.warn('[Alarm] No GPIO backend available. For Bookworm Pi OS run: sudo apt install pigpio && sudo systemctl start pigpiod');
+    registerShutdown();
+    return;
   }
 
   registerShutdown();
 }
 
-/**
- * Open stack-light GPIO once at startup so failures show in the console immediately (not only after first mismatch).
- */
 function initStackLightGpioAtStartup() {
   initGpio();
   writeAlarmState(false);
 }
 
-/**
- * Watch GPIO for physical reset button (falling edge = pressed to GND).
- * Call once from main process when app is ready.
- */
+function startPigpioResetPoll(resetPin) {
+  if (pigpioResetPoll || !pigpioDaemonOk()) return;
+  try {
+    pigs(['m', String(resetPin), '0']);
+    pigs(['pud', String(resetPin), '2']);
+  } catch (e) {
+    console.warn('[Alarm] pigpio reset pin setup failed:', e.message);
+    return;
+  }
+  pigpioLastResetRead = 1;
+  pigpioResetPoll = setInterval(() => {
+    let v;
+    try {
+      const out = execFileSync('pigs', ['r', String(resetPin)], { encoding: 'utf8', timeout: 2000 }).trim();
+      v = parseInt(out, 10);
+      if (!Number.isFinite(v)) return;
+    } catch {
+      return;
+    }
+    if (pigpioLastResetRead === 1 && v === 0 && alarmActive) {
+      clearAlarm();
+      console.log('[Alarm] Cleared by GPIO reset button (BCM', resetPin + ', pigpio)');
+    }
+    pigpioLastResetRead = v;
+  }, 40);
+  console.log('[Alarm] pigpio: BCM', resetPin, 'reset button (poll)');
+  registerShutdown();
+}
+
 function startAlarmResetButtonWatcher() {
   if (resetWatcherStarted) return;
   resetWatcherStarted = true;
 
-  if (process.env.ENABLE_GPIO === '0') {
-    return;
-  }
+  if (process.env.ENABLE_GPIO === '0') return;
   if (process.env.ENABLE_GPIO_RESET === '0') {
     console.log('[Alarm] GPIO reset button disabled (ENABLE_GPIO_RESET=0)');
     return;
   }
-
-  if (process.platform !== 'linux') {
-    return;
-  }
+  if (process.platform !== 'linux') return;
 
   const resetPin = getResetPinNumber();
-  if (resetPin == null) {
-    return;
-  }
+  if (resetPin == null) return;
 
   const outPin = getGpioPinNumber();
   if (resetPin === outPin) {
-    console.warn('[Alarm] GPIO_RESET_PIN cannot match GPIO_PIN (stack light); reset button not started');
+    console.warn('[Alarm] GPIO_RESET_PIN cannot match GPIO_PIN');
+    return;
+  }
+
+  const force = (process.env.GPIO_BACKEND || '').toLowerCase();
+
+  if (gpioBackend === 'pigpio' || (force !== 'onoff' && pigpioDaemonOk())) {
+    startPigpioResetPoll(resetPin);
     return;
   }
 
@@ -178,17 +285,16 @@ function startAlarmResetButtonWatcher() {
         console.log('[Alarm] Cleared by GPIO reset button (BCM', resetPin + ')');
       }
     });
-    console.log('[Alarm] GPIO BCM', resetPin, 'ready for alarm reset button (falling edge → GND)');
+    console.log('[Alarm] onoff: BCM', resetPin, 'reset button');
     registerShutdown();
   } catch (e) {
-    console.warn('[Alarm] Reset button GPIO not available:', e.message);
-    gpioResetIn = null;
+    console.warn('[Alarm] onoff reset button failed:', e.message);
+    if (pigpioDaemonOk()) {
+      startPigpioResetPoll(resetPin);
+    }
   }
 }
 
-/**
- * Trigger the physical alarm (stack light on).
- */
 function triggerAlarm() {
   alarmActive = true;
   initGpio();
@@ -196,9 +302,6 @@ function triggerAlarm() {
   console.log('[Alarm] TRIGGERED - mismatch detected');
 }
 
-/**
- * Turn off the physical alarm (stack light off).
- */
 function clearAlarm() {
   alarmActive = false;
   initGpio();

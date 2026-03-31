@@ -295,19 +295,17 @@ app.whenReady().then(() => {
   initDatabase();
   createWindow();
   startViewerServer();
+  // Stack light first so alarm-service picks pigpio vs onoff before reset watcher runs
+  try {
+    initStackLightGpioAtStartup();
+  } catch (e) {
+    console.error('[Alarm] Stack light startup probe failed:', e && e.message);
+  }
   try {
     startAlarmResetButtonWatcher();
   } catch (e) {
     console.error('[Alarm] Reset button setup failed:', e && e.message);
   }
-  // Defer stack-light probe so the window opens even if GPIO/native code misbehaves
-  setImmediate(() => {
-    try {
-      initStackLightGpioAtStartup();
-    } catch (e) {
-      console.error('[Alarm] Stack light startup probe failed:', e && e.message);
-    }
-  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
