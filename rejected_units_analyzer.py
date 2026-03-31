@@ -596,7 +596,7 @@ class RejectedUnitsAnalyzer(QMainWindow):
         
         header.setLayout(header_layout)
         main_layout.addWidget(header)
-                
+        
     def apply_theme(self):
         bg = self.theme.get_color('bg')
         fg = self.theme.get_color('fg')
@@ -753,8 +753,8 @@ class RejectedUnitsAnalyzer(QMainWindow):
         layout.setSpacing(20)
         
         # Main file upload card
-        main_card = ModernCard("📊 Load Rejected Units Data", self.theme)        
-
+        main_card = ModernCard("📊 Load Rejected Units Data", self.theme)
+        
         # Icon
         icon_label = QLabel("📁")
         icon_label.setFont(QFont("Segoe UI", 64))
@@ -1590,7 +1590,7 @@ class RejectedUnitsAnalyzer(QMainWindow):
         for i, (title, value, color) in enumerate(metrics):
             card = MetricCard(title, value, color, self.theme)
             self.metrics_layout.addWidget(card, 0, i)
-        
+            
     def update_trends(self):
         if self.filtered_data is None:
             return
@@ -2184,7 +2184,7 @@ class RejectedUnitsAnalyzer(QMainWindow):
             ax1.tick_params(axis='x', colors='white')
             ax1.tick_params(axis='y', colors='white')
             ax1.grid(True, alpha=0.3, color='white', axis='y')
-
+            
             worst_hour = hourly_counts.idxmax()
             best_hour = hourly_counts.idxmin()
             
@@ -2213,9 +2213,9 @@ class RejectedUnitsAnalyzer(QMainWindow):
                         comparison_labels[1] + f'{int(height)}', ha='center', va='bottom', color='white', fontweight='bold', fontsize=8,
                         bbox=dict(boxstyle="round,pad=0.2", facecolor='green', alpha=0.8))
                 else:
-                    ax1.text(bar.get_x() + bar.get_width()/2., height + 0.1,
-                            f'{int(height)}', ha='center', va='bottom', color='white', fontweight='bold', fontsize=8,
-                            bbox=dict(boxstyle="round,pad=0.2", facecolor='black', alpha=0.8))
+                ax1.text(bar.get_x() + bar.get_width()/2., height + 0.1,
+                        f'{int(height)}', ha='center', va='bottom', color='white', fontweight='bold', fontsize=8,
+                        bbox=dict(boxstyle="round,pad=0.2", facecolor='black', alpha=0.8))
                 
             
             # Plot 2: Rejections by day of week
@@ -2237,8 +2237,8 @@ class RejectedUnitsAnalyzer(QMainWindow):
                 height = bar.get_height()
                 ax2.text(bar.get_x() + bar.get_width()/2., height + 0.1,
                         f'{int(height)}', ha='center', va='bottom', color='white', fontweight='bold', fontsize=8,
-                        bbox=dict(boxstyle="round,pad=0.2", facecolor='black', alpha=0.8))
-
+                            bbox=dict(boxstyle="round,pad=0.2", facecolor='black', alpha=0.8))
+            
         # Style all axes
         for ax in [ax1, ax2]:
             for spine in ax.spines.values():

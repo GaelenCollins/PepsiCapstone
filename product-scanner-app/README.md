@@ -98,10 +98,12 @@ product-scanner-app/
 
 - **Default pin**: **BCM GPIO 10** (often labeled “GPIO 10” on diagrams; physical pin **19** on the 40-pin header). Wire your driver circuit to **3.3 V logic** on the Pi (GPIO is not 5 V tolerant — use a level shifter or a 3.3 V–compatible relay module if your board expects 5 V on the control pin).
 - **When**: `triggerAlarm()` runs when a mismatch is **logged** (after the 5 s delay). `clearAlarm()` runs on **Override** in the app.
+- **Reset button (input, optional)**: default **BCM GPIO 9** (physical pin **21**). Wire the button between **GPIO 9** and **GND** (uses internal pull-up; press = connect to GND). Pressing clears the stack light if the alarm is on (same as software clear; does not override DB records).
 - **Env (optional)**:
   - `ENABLE_GPIO=0` — disable GPIO (e.g. development on a PC); alarm still logs to console.
-  - `GPIO_PIN=10` — BCM pin number (default 10).
+  - `GPIO_PIN=10` — stack light output, BCM (default 10).
   - `STACK_LIGHT_ACTIVE_LOW=1` — set if your relay module turns **on** when GPIO is **LOW**.
+  - `GPIO_RESET_PIN=9` — reset button input, BCM (default 9). Set `ENABLE_GPIO_RESET=0` to disable the button watcher only.
 
 **Permissions**: add the user running Electron to the `gpio` group, then reboot:  
 `sudo usermod -a -G gpio $USER`
