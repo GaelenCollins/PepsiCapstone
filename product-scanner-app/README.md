@@ -96,7 +96,8 @@ product-scanner-app/
 
 `services/alarm-service.js` drives a **stack light** (or relay) via **GPIO** on Linux (Raspberry Pi). It runs in the **main process** only.
 
-- **Default pin**: **BCM GPIO 10** (often labeled “GPIO 10” on diagrams; physical pin **19** on the 40-pin header). Wire your driver circuit to **3.3 V logic** on the Pi (GPIO is not 5 V tolerant — use a level shifter or a 3.3 V–compatible relay module if your board expects 5 V on the control pin). **Note:** BCM 10 is **SPI MOSI**; if SPI is enabled in `raspi-config`, use another pin (`GPIO_PIN=17 npm start`) or disable SPI.
+- **Default pin**: **BCM GPIO 17** (physical pin **11**). **BCM 10** (pin 19) is **SPI MOSI** and often causes **`EINVAL` on write** if SPI is on — use `GPIO_PIN=10 npm start` only if SPI is disabled and you wired pin 19. Wire your driver to **3.3 V logic** (GPIO is not 5 V tolerant).
+- **Electron on Pi:** hardware acceleration is disabled on Linux by default to reduce `GpuControl` / GPU crashes. Set `ELECTRON_DISABLE_GPU=0` before `npm start` to re-enable if needed.
 - **When**: `triggerAlarm()` runs when a mismatch is **logged** (after the 5 s delay). `clearAlarm()` runs on **Override** in the app.
 - **Reset button (input, optional)**: default **BCM GPIO 9** (physical pin **21**). Wire the button between **GPIO 9** and **GND** (uses internal pull-up; press = connect to GND). Pressing clears the stack light if the alarm is on (same as software clear; does not override DB records).
 - **Env (optional)**:

@@ -2,7 +2,7 @@
  * Physical stack light / alarm on Raspberry Pi GPIO + optional reset button.
  *
  * Stack light (output):
- *   Default BCM GPIO 10 (physical pin 19 on 40-pin header).
+ *   Default BCM GPIO 17 (physical pin 11 on 40-pin header). BCM 10 is SPI MOSI and often causes EINVAL on write — use 17 unless you know SPI is off and you wired pin 19.
  *
  * Reset button (input, optional):
  *   Default BCM GPIO 9 (physical pin 21). Wire: one side to GPIO, other to GND (internal pull-up).
@@ -10,7 +10,7 @@
  *
  * Env (optional):
  *   ENABLE_GPIO=0          — disable all GPIO (stack light + reset button)
- *   GPIO_PIN=10            — stack light output (BCM)
+ *   GPIO_PIN=17            — stack light output (BCM); use 17 if 10 fails (SPI/MOSI) or EINVAL on write
  *   STACK_LIGHT_ACTIVE_LOW=1 — alarm ON = GPIO LOW
  *   GPIO_RESET_PIN=9       — reset button input (BCM); set empty or ENABLE_GPIO_RESET=0 to disable
  *   ENABLE_GPIO_RESET=0    — disable only the reset button (keep stack light GPIO)
@@ -27,8 +27,8 @@ let resetWatcherStarted = false;
 let shutdownRegistered = false;
 
 function getGpioPinNumber() {
-  const n = parseInt(process.env.GPIO_PIN || '10', 10);
-  return Number.isFinite(n) && n >= 0 ? n : 10;
+  const n = parseInt(process.env.GPIO_PIN || '17', 10);
+  return Number.isFinite(n) && n >= 0 ? n : 17;
 }
 
 function getResetPinNumber() {
@@ -96,19 +96,31 @@ function initGpio() {
     return;
   }
 
+  let pin;
   try {
     const { Gpio } = require('onoff');
-    const pin = getGpioPinNumber();
+    pin = getGpioPinNumber();
     gpioOut = new Gpio(pin, 'out');
+  } catch (e) {
+    gpioOut = null;
+    gpioOutputFailed = true;
+    console.warn('[Alarm] Stack light GPIO export failed:', e.message);
+    console.warn('[Alarm] Hint: sudo usermod -a -G gpio $USER then reboot; npx electron-rebuild -f -w onoff');
+    registerShutdown();
+    return;
+  }
+  try {
     gpioOut.writeSync(activeLow() ? 1 : 0);
     gpioOutputReady = true;
     console.log('[Alarm] GPIO BCM', pin, 'ready for stack light (active', activeLow() ? 'LOW' : 'HIGH', ')');
   } catch (e) {
+    try {
+      gpioOut.unexport();
+    } catch (_) {}
     gpioOut = null;
     gpioOutputFailed = true;
-    console.warn('[Alarm] Stack light GPIO not available:', e.message);
-    console.warn('[Alarm] Hint: sudo usermod -a -G gpio $USER then reboot; on Pi run: npx electron-rebuild -f -w onoff');
-    console.warn('[Alarm] If SPI is enabled, BCM 10 is MOSI — set GPIO_PIN to another pin or disable SPI in raspi-config.');
+    console.warn('[Alarm] Stack light GPIO write failed (often SPI pin conflict or Bookworm sysfs):', e.message);
+    console.warn('[Alarm] Try: GPIO_PIN=17 npm start   or disable SPI in raspi-config, or wire stack light to BCM 17 (pin 11).');
   }
 
   registerShutdown();
