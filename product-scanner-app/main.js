@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const os = require('os');
-const { triggerAlarm, clearAlarm, startAlarmResetButtonWatcher } = require('./services/alarm-service');
+const { triggerAlarm, clearAlarm, startAlarmResetButtonWatcher, initStackLightGpioAtStartup } = require('./services/alarm-service');
 const { initDatabase, logMismatch, getMismatches, getStatistics, overrideMismatch } = require('./services/database');
 const { getErrorTypeLabel } = require('./services/error-types');
 const { getEmailConfig, setEmailConfig, sendErrorNotificationToOscar } = require('./services/email-service');
@@ -292,6 +292,7 @@ app.whenReady().then(() => {
   createWindow();
   startViewerServer();
   startAlarmResetButtonWatcher();
+  initStackLightGpioAtStartup();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

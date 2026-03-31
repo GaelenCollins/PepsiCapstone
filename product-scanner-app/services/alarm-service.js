@@ -19,7 +19,10 @@
 let alarmActive = false;
 let gpioOut = null;
 let gpioResetIn = null;
-let gpioInitAttempted = false;
+/** Output GPIO: only set true after successful export; false = not tried yet or failed */
+let gpioOutputReady = false;
+let gpioOutputSkip = false;
+let gpioOutputFailed = false;
 let resetWatcherStarted = false;
 let shutdownRegistered = false;
 
@@ -79,15 +82,16 @@ function registerShutdown() {
 }
 
 function initGpio() {
-  if (gpioInitAttempted) return;
-  gpioInitAttempted = true;
+  if (gpioOutputSkip || gpioOutputReady || gpioOutputFailed) return;
 
   if (process.env.ENABLE_GPIO === '0') {
+    gpioOutputSkip = true;
     console.log('[Alarm] GPIO disabled (ENABLE_GPIO=0)');
     return;
   }
 
   if (process.platform !== 'linux') {
+    gpioOutputSkip = true;
     console.log('[Alarm] GPIO skipped (not Linux — use Raspberry Pi for stack light)');
     return;
   }
@@ -97,13 +101,25 @@ function initGpio() {
     const pin = getGpioPinNumber();
     gpioOut = new Gpio(pin, 'out');
     gpioOut.writeSync(activeLow() ? 1 : 0);
+    gpioOutputReady = true;
     console.log('[Alarm] GPIO BCM', pin, 'ready for stack light (active', activeLow() ? 'LOW' : 'HIGH', ')');
   } catch (e) {
-    console.warn('[Alarm] Stack light GPIO not available:', e.message);
     gpioOut = null;
+    gpioOutputFailed = true;
+    console.warn('[Alarm] Stack light GPIO not available:', e.message);
+    console.warn('[Alarm] Hint: sudo usermod -a -G gpio $USER then reboot; on Pi run: npx electron-rebuild -f -w onoff');
+    console.warn('[Alarm] If SPI is enabled, BCM 10 is MOSI — set GPIO_PIN to another pin or disable SPI in raspi-config.');
   }
 
   registerShutdown();
+}
+
+/**
+ * Open stack-light GPIO once at startup so failures show in the console immediately (not only after first mismatch).
+ */
+function initStackLightGpioAtStartup() {
+  initGpio();
+  writeAlarmState(false);
 }
 
 /**
@@ -186,5 +202,6 @@ module.exports = {
   triggerAlarm,
   clearAlarm,
   isAlarmActive,
-  startAlarmResetButtonWatcher
+  startAlarmResetButtonWatcher,
+  initStackLightGpioAtStartup
 };
