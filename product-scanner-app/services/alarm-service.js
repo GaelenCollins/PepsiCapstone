@@ -21,7 +21,7 @@
  * Physical reset: clears light and overrides latest pending mismatch (resolvedBy gpio_reset), like UI Override.
  */
 
-const { execFileSync } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
 
 let alarmActive = false;
 let gpioOut = null;
@@ -32,6 +32,8 @@ let pigpioOutPin = -1;
 let pigpioResetPoll = null;
 /** Consecutive polls reading "pressed" level (debounce). */
 let pigpioResetPressStreak = 0;
+/** Prevents stacked pigpio reads; execFileSync every 40ms blocked Electron main on Pi. */
+let pigpioReadInFlight = false;
 let gpioOutputReady = false;
 let gpioOutputSkip = false;
 let gpioOutputFailed = false;
@@ -258,15 +260,17 @@ function startPigpioResetPoll(resetPin) {
   }
   pigpioResetPressStreak = 0;
   pigpioResetPoll = setInterval(() => {
-    let v;
-    try {
-      const out = execFileSync('pigs', ['r', String(resetPin)], { encoding: 'utf8', timeout: 2000 }).trim();
-      v = parseInt(out, 10);
-      if (!Number.isFinite(v)) return;
-    } catch {
+    if (!alarmActive) {
+      pigpioResetPressStreak = 0;
       return;
     }
-    if (alarmActive) {
+    if (pigpioReadInFlight) return;
+    pigpioReadInFlight = true;
+    execFile('pigs', ['r', String(resetPin)], { encoding: 'utf8', timeout: 2000 }, (err, out) => {
+      pigpioReadInFlight = false;
+      if (err) return;
+      const v = parseInt(String(out || '').trim(), 10);
+      if (!Number.isFinite(v)) return;
       if (resetPinPressed(v)) {
         pigpioResetPressStreak += 1;
         if (pigpioResetPressStreak >= 3) {
@@ -278,10 +282,8 @@ function startPigpioResetPoll(resetPin) {
       } else {
         pigpioResetPressStreak = 0;
       }
-    } else {
-      pigpioResetPressStreak = 0;
-    }
-  }, 40);
+    });
+  }, 60);
   console.log(
     '[Alarm] pigpio: BCM',
     resetPin,

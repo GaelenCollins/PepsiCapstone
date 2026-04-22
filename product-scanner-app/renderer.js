@@ -844,12 +844,17 @@ async function updateProductResolvedName(code) {
     displayText = 'Not in product list';
   }
   el.textContent = displayText;
-  try {
-    await ipcRenderer.invoke('log-scan', { code, product: displayText });
-  } catch (logErr) {
-    console.warn('Scan log failed', logErr);
-  }
   pushViewerState();
+  // Do not await: log-scan uses sync fs on main; awaiting deferred comparison (after .then) until IPC drained—bad on RPi3 + GPIO.
+  void ipcRenderer
+    .invoke('log-scan', { code, product: displayText })
+    .then(() => {
+      pushViewerState();
+    })
+    .catch((logErr) => {
+      console.warn('Scan log failed', logErr);
+      pushViewerState();
+    });
 }
 
 // Export

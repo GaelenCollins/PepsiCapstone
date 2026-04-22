@@ -383,8 +383,10 @@ ipcMain.handle('log-mismatch', async (event, mismatchData) => {
   try {
     const id = await logMismatch(mismatchData);
     triggerAlarm();
-    // Email Oscar only when there is an error (if enabled in Settings)
-    sendErrorNotificationToOscar(mismatchData);
+    // Defer so renderer is not extra-delayed; email can wait for next event-loop tick
+    setImmediate(() => {
+      void sendErrorNotificationToOscar(mismatchData).catch(() => {});
+    });
     return id;
   } catch (error) {
     console.error('Error logging mismatch:', error);
