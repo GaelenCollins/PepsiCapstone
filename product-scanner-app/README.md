@@ -43,13 +43,14 @@ With the app running, a **viewer server** runs on port **3847**. Supervisors can
 
 **If your phone can’t reach the URL:**
 
-1. **Check the URL:** Use **http** (not https) and port **3847**. Example: `http://192.168.1.68:3847`.
-2. **Confirm the Mac’s IP:** On the Mac, open **System Settings → Network → Wi‑Fi → Details** (or run `ifconfig | grep "inet "` in Terminal). The IP might have changed (DHCP).
-3. **Test from the Mac first:** With the app running, on the Mac open Terminal and run:  
-   `curl -s -o /dev/null -w "%{http_code}" http://YOUR_MAC_IP:3847/api/state`  
-   (replace `YOUR_MAC_IP` with the same IP you use on the phone, e.g. `192.168.1.68`). If you see **200**, the server is reachable on that IP; the problem is then between the phone and the Mac.
-4. **Same Wi‑Fi:** Phone and Mac must be on the **same** Wi‑Fi network (not guest network, not cellular on the phone).
-5. **Router “AP isolation” / “client isolation”:** Many routers have a setting that blocks Wi‑Fi devices from talking to each other. In the router’s admin page, turn that off so the phone can reach the Mac.
+1. **Full URL in the address bar:** Use **`http://10.10.54.55:3847`** (include **`http://`**, not `https://`). Typing `10.10.54.55:3847` alone can fail or use search instead of opening the page.
+2. **Same subnet:** On the Capstone / showcase Wi‑Fi, your **laptop or phone** should have an address in the **same range** as the Pi (e.g. if the Pi is `10.10.54.55`, the client should be `10.10.54.x`). If the laptop is `192.168.x.x` while the Pi is `10.10.54.x`, you are on a different network path and need to connect to the same SSID/VLAN the Pi uses.
+3. **Raspberry Pi (not Mac):** Use the **IP printed in the terminal when the app starts** (or `hostname -I` on the Pi). Test from the Pi: `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3847/api/state` → **200**. From your laptop: `curl` the Pi’s `http://IP:3847/api/state` → **200** if the network allows device-to-device traffic.
+4. **Event / school “special” Wi‑Fi** often enables **AP isolation** or **client isolation** (devices can reach the internet but not each other). That blocks phones/laptops from reaching the Pi. Fix: router admin, or a different SSID, or a wired path — network staff has to allow client-to-client on that VLAN.
+5. **Pi firewall (if enabled):** `sudo ufw allow 3847/tcp` then `sudo ufw reload` (skip if ufw is inactive).
+6. **Confirm a computer’s IP:** **Mac:** System Settings → Network → Wi‑Fi → Details, or `ifconfig` / `ipconfig getifaddr en0` in Terminal. The IP can change (DHCP).
+7. **Same Wi‑Fi as the Pi (not guest / not cellular** on the phone) for client devices that should load the viewer.
+8. **Router “AP isolation” (repeat):** Turn off for the SSID the Pi uses if you control the router.
 
 The item master and all data are the same for the host app and every viewer.
 

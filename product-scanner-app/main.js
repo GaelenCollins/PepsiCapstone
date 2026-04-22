@@ -279,9 +279,12 @@ function startViewerServer() {
         }
       }
     } catch (e) {}
-    console.log('Viewer listening on port ' + VIEWER_PORT + '. Try from phone (same Wi-Fi, use http not https):');
-    urls.slice(1).forEach(u => console.log('  ' + u));
-    console.log('If phone cannot connect: (1) Confirm Mac IP in System Settings > Network. (2) Turn off "Guest network" or "AP isolation" on router. (3) On Mac run: curl -s -o /dev/null -w "%{http_code}" ' + (urls[1] || urls[0]) + '/api/state  (expect 200)');
+    console.log('Viewer listening on port ' + VIEWER_PORT + ' (all interfaces). Open in a browser using the full URL including http:// — e.g. http://10.x.x.x:' + VIEWER_PORT + ' (not https).');
+    urls.slice(1).forEach((u) => console.log('  ' + u));
+    const tryUrl = urls[1] || urls[0];
+    console.log(
+      'If another device cannot connect: same Wi-Fi subnet; "Guest" or "AP/client isolation" often blocks device-to-device; try: curl -s -o /dev/null -w "%{http_code}" ' + tryUrl + '/api/state  (expect 200)'
+    );
   });
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') console.warn(`Viewer port ${VIEWER_PORT} in use; skip viewer.`);
